@@ -1,0 +1,186 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Arduino S3 data exporter. For deployment and architectural details, see https://github.com/arduino/aws-s3-integration
+
+Parameters:
+  LambdaFunctionName:
+    Type: String
+    Default: 'arduino-s3-data-exporter'
+    Description: Name of the Lambda function.
+
+  LambdaCodeS3Bucket:
+    Type: String
+    Description: S3 bucket where the Lambda function ZIP file is stored.
+
+  LambdaCodeS3Key:
+    Type: String
+    Default: 'arduino-s3-integration-lambda.zip'
+    Description: S3 key for the Lambda function ZIP file.
+
+  IotApiKey:
+    Type: String
+    Description: Arduino API Key.
+
+  IotApiSecret:
+    Type: String
+    Description: Arduino API Secret.
+    NoEcho: true
+
+  IotOrgId:
+    Type: String
+    Default: '<empty>'
+    Description: Arduino Organization ID (optional).
+
+  TagFilter:
+    Type: String
+    Default: '<empty>'
+    Description: Filter things to import by tag (optional). Format> tag1=value1,tag2=value2
+
+  Resolution:
+    Type: Number
+    Default: 300
+    Description: Samples resolution in seconds. Default is 5 minutes (300s).
+
+  DestinationS3Bucket:
+    Type: String
+    Default: 'aws-arduino-data-export'
+    Description: S3 bucket where saved samples will be stored.
+
+Resources:
+
+  # IAM Role for Lambda
+  ArduinoS3LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ArduinoS3LambdaExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: arn:aws:ssm:*:*:parameter/arduino/s3-importer/*
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:aws:s3:::${DestinationS3Bucket}
+                  - !Sub arn:aws:s3:::${DestinationS3Bucket}/*
+
+  # Lambda Function
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName:
+        Ref: LambdaFunctionName
+      Handler: bootstrap
+      Role: !GetAtt ArduinoS3LambdaExecutionRole.Arn
+      Code:
+        S3Bucket:
+          Ref: LambdaCodeS3Bucket
+        S3Key:
+          Ref: LambdaCodeS3Key
+      Runtime: provided.al2
+      Timeout: 900
+      MemorySize: 256
+
+  # Parameters in Parameter Store
+  ApiKeyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /arduino/s3-importer/iot/api-key
+      Type: String
+      Value:
+        Ref: IotApiKey
+      Tier: Standard
+
+  ApiSecretParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /arduino/s3-importer/iot/api-secret
+      Type: String
+      Value:
+        Ref: IotApiSecret
+      Tier: Standard
+
+  OrgIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /arduino/s3-importer/iot/org-id
+      Type: String
+      Value:
+        Ref: IotOrgId
+      Tier: Standard
+
+  FilterTagsParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /arduino/s3-importer/iot/filter/tags
+      Type: String
+      Value:
+        Ref: TagFilter
+      Tier: Standard
+
+  ResolutionParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /arduino/s3-importer/iot/samples-resolution-seconds
+      Type: String
+      Value:
+        Ref: Resolution
+      Tier: Standard
+
+  DestinationS3BucketParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /arduino/s3-importer/destination-bucket
+      Type: String
+      Value:
+        Ref: DestinationS3Bucket
+      Tier: Standard
+
+  # EventBridge Rule to trigger Lambda every hour
+  EventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: cron(10 * * * ? *)
+      Targets:
+        - Arn: !GetAtt LambdaFunction.Arn
+          Id: LambdaTarget
+      State: ENABLED
+
+  # Permission for EventBridge to invoke Lambda
+  LambdaPermissionForEventBridge:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: LambdaFunctionName
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt EventBridgeRule.Arn
+
+Outputs:
+  LambdaFunctionArn:
+    Description: ARN of the deployed Lambda function.
+    Value: !GetAtt LambdaFunction.Arn
+
+  ArduinoS3LambdaExecutionRoleArn:
+    Description: ARN of the IAM role associated with the Lambda function.
+    Value: !GetAtt ArduinoS3LambdaExecutionRole.Arn
