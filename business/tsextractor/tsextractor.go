@@ -251,6 +251,9 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 
 			ts := response.Times[i]
 			value := response.Values[i]
+			if value == nil {
+				continue
+			}
 			if strValue, ok := value.(string); ok {
 				samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, strValue))
 			}
