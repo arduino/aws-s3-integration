@@ -298,6 +298,50 @@ func (cl *Client) GetTimeSeriesByThing(ctx context.Context, thingID string, from
 	return ts, false, nil
 }
 
+func (cl *Client) GetTimeSeriesStringSampling(ctx context.Context, properties []string, from, to time.Time, interval int32) (*iotclient.ArduinoSeriesBatchSampled, bool, error) {
+	if len(properties) == 0 {
+		return nil, false, fmt.Errorf("no properties provided")
+	}
+
+	ctx, err := ctxWithToken(ctx, cl.token)
+	if err != nil {
+		return nil, false, err
+	}
+
+	requests := make([]iotclient.BatchQuerySampledRequestMediaV1, 0, len(properties))
+	for _, prop := range properties {
+		if prop == "" {
+			continue
+		}
+		requests = append(requests, iotclient.BatchQuerySampledRequestMediaV1{
+			From:     &from,
+			Interval: &interval,
+			Q:        fmt.Sprintf("property.%s", prop),
+			To:       &to,
+		})
+	}
+
+	if len(requests) == 0 {
+		return nil, false, fmt.Errorf("no valid properties provided")
+	}
+
+	batchQueryRequestsMediaV1 := iotclient.BatchQuerySampledRequestsMediaV1{
+		Requests: requests,
+	}
+
+	request := cl.api.SeriesV2Api.SeriesV2BatchQuerySampling(ctx)
+	request = request.BatchQuerySampledRequestsMediaV1(batchQueryRequestsMediaV1)
+	ts, httpResponse, err := cl.api.SeriesV2Api.SeriesV2BatchQuerySamplingExecute(request)
+	if err != nil {
+		err = fmt.Errorf("retrieving time series sampling: %w", errorDetail(err))
+		if httpResponse != nil && httpResponse.StatusCode == 429 { // Retry if rate limited
+			return nil, true, err
+		}
+		return nil, false, err
+	}
+	return ts, false, nil
+}
+
 func (cl *Client) setup(client, secret, organization string) error {
 	baseURL := GetArduinoAPIBaseURL()
 
