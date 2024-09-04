@@ -81,9 +81,17 @@ func (a *TsExtractor) ExportTSToS3(
 			defer func() { <-tokens }()
 			defer wg.Done()
 
-			err := a.populateTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
+			// Populate numeric time series data
+			err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
 			if err != nil {
 				a.logger.Error("Error populating time series data: ", err)
+				return
+			}
+
+			// Populate string time series data, if any
+			err = a.populateStringTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
+			if err != nil {
+				a.logger.Error("Error populating string time series data: ", err)
 				return
 			}
 		}(thingID, thing, writer)
@@ -104,7 +112,7 @@ func (a *TsExtractor) ExportTSToS3(
 	return nil
 }
 
-func (a *TsExtractor) populateTSDataIntoS3(
+func (a *TsExtractor) populateNumericTSDataIntoS3(
 	ctx context.Context,
 	from time.Time,
 	to time.Time,
@@ -147,15 +155,7 @@ func (a *TsExtractor) populateTSDataIntoS3(
 
 			ts := response.Times[i]
 			value := response.Values[i]
-			row := make([]string, 6)
-			row[0] = ts.UTC().Format(time.RFC3339)
-			row[1] = thingID
-			row[2] = thing.Name
-			row[3] = propertyID
-			row[4] = propertyName
-			row[5] = strconv.FormatFloat(value, 'f', 3, 64)
-
-			samples = append(samples, row)
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, strconv.FormatFloat(value, 'f', 3, 64)))
 		}
 	}
 
@@ -170,6 +170,17 @@ func (a *TsExtractor) populateTSDataIntoS3(
 	return nil
 }
 
+func composeRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, value string) []string {
+	row := make([]string, 6)
+	row[0] = ts.UTC().Format(time.RFC3339)
+	row[1] = thingID
+	row[2] = thingName
+	row[3] = propertyID
+	row[4] = propertyName
+	row[5] = value
+	return row
+}
+
 func extractPropertyName(thing iotclient.ArduinoThing, propertyID string) string {
 	propertyName := ""
 	for _, prop := range thing.Properties {
@@ -179,4 +190,83 @@ func extractPropertyName(thing iotclient.ArduinoThing, propertyID string) string
 		}
 	}
 	return propertyName
+}
+
+func isStringProperty(ptype string) bool {
+	return ptype == "CHARSTRING"
+}
+
+func (a *TsExtractor) populateStringTSDataIntoS3(
+	ctx context.Context,
+	from time.Time,
+	to time.Time,
+	thingID string,
+	thing iotclient.ArduinoThing,
+	resolution int,
+	writer *csv.CsvWriter) error {
+
+	// Filter properties by char type
+	stringProperties := []string{}
+	for _, prop := range thing.Properties {
+		if isStringProperty(prop.Type) {
+			stringProperties = append(stringProperties, prop.Id)
+		}
+	}
+
+	if len(stringProperties) == 0 {
+		return nil
+	}
+
+	var batched *iotclient.ArduinoSeriesBatchSampled
+	var err error
+	var retry bool
+	for i := 0; i < 3; i++ {
+		batched, retry, err = a.iotcl.GetTimeSeriesStringSampling(ctx, stringProperties, from, to, int32(resolution))
+		if !retry {
+			break
+		} else {
+			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
+			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			time.Sleep(1 * time.Second)
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	sampleCount := int64(0)
+	samples := [][]string{}
+	for _, response := range batched.Responses {
+		if response.CountValues == 0 {
+			continue
+		}
+
+		propertyID := strings.Replace(response.Query, "property.", "", 1)
+		a.logger.Debugf("Thing %s - String Property %s - %d values\n", thingID, propertyID, response.CountValues)
+		sampleCount += response.CountValues
+
+		propertyName := extractPropertyName(thing, propertyID)
+
+		for i := 0; i < len(response.Times); i++ {
+
+			ts := response.Times[i]
+			value := response.Values[i]
+			if value == nil {
+				continue
+			}
+			if strValue, ok := value.(string); ok {
+				samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, strValue))
+			}
+		}
+	}
+
+	// Write samples to csv ouput file
+	if len(samples) > 0 {
+		if err := writer.Write(samples); err != nil {
+			return err
+		}
+		a.logger.Debugf("Thing %s [%s] string properties saved %d values\n", thingID, thing.Name, sampleCount)
+	}
+
+	return nil
 }
