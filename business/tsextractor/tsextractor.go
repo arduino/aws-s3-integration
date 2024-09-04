@@ -267,9 +267,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			if strValue, ok := value.(string); ok {
-				samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, strValue))
-			}
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, interfaceToString(value)))
 		}
 	}
 
