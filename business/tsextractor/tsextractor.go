@@ -81,18 +81,27 @@ func (a *TsExtractor) ExportTSToS3(
 			defer func() { <-tokens }()
 			defer wg.Done()
 
-			// Populate numeric time series data
-			err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
-			if err != nil {
-				a.logger.Error("Error populating time series data: ", err)
-				return
-			}
+			if resolution <= 0 {
+				// Populate raw time series data
+				err := a.populateRawTSDataIntoS3(ctx, from, to, thingID, thing, writer)
+				if err != nil {
+					a.logger.Error("Error populating raw time series data: ", err)
+					return
+				}
+			} else {
+				// Populate numeric time series data
+				err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
+				if err != nil {
+					a.logger.Error("Error populating time series data: ", err)
+					return
+				}
 
-			// Populate string time series data, if any
-			err = a.populateStringTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
-			if err != nil {
-				a.logger.Error("Error populating string time series data: ", err)
-				return
+				// Populate string time series data, if any
+				err = a.populateStringTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
+				if err != nil {
+					a.logger.Error("Error populating string time series data: ", err)
+					return
+				}
 			}
 		}(thingID, thing, writer)
 	}
@@ -121,6 +130,10 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	resolution int,
 	writer *csv.CsvWriter) error {
 
+	if resolution <= 60 {
+		resolution = 60
+	}
+	
 	var batched *iotclient.ArduinoSeriesBatch
 	var err error
 	var retry bool
@@ -269,4 +282,79 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 	}
 
 	return nil
+}
+
+func (a *TsExtractor) populateRawTSDataIntoS3(
+	ctx context.Context,
+	from time.Time,
+	to time.Time,
+	thingID string,
+	thing iotclient.ArduinoThing,
+	writer *csv.CsvWriter) error {
+
+	var batched *iotclient.ArduinoSeriesRawBatch
+	var err error
+	var retry bool
+	for i := 0; i < 3; i++ {
+		batched, retry, err = a.iotcl.GetRawTimeSeriesByThing(ctx, thingID, from, to)
+		if !retry {
+			break
+		} else {
+			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
+			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			time.Sleep(1 * time.Second)
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	sampleCount := int64(0)
+	samples := [][]string{}
+	for _, response := range batched.Responses {
+		if response.CountValues == 0 {
+			continue
+		}
+
+		propertyID := strings.Replace(response.Query, "property.", "", 1)
+		a.logger.Debugf("Thing %s - Property %s - %d values\n", thingID, propertyID, response.CountValues)
+		sampleCount += response.CountValues
+
+		propertyName := extractPropertyName(thing, propertyID)
+
+		for i := 0; i < len(response.Times); i++ {
+
+			ts := response.Times[i]
+			value := response.Values[i]
+			if value == nil {
+				continue
+			}
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, interfaceToString(value)))
+		}
+	}
+
+	// Write samples to csv ouput file
+	if len(samples) > 0 {
+		if err := writer.Write(samples); err != nil {
+			return err
+		}
+		a.logger.Debugf("Thing %s [%s] raw data saved %d values\n", thingID, thing.Name, sampleCount)
+	}
+
+	return nil
+}
+
+func interfaceToString(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case int:
+		return strconv.Itoa(v)
+	case float64:
+		return strconv.FormatFloat(v, 'f', 3, 64)
+	case bool:
+		return strconv.FormatBool(v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
