@@ -41,16 +41,28 @@ CFT deployment requires:
 Before stack creation, two S3 buckets has to be created:
 * a temporary bucket where lambda binaries and CFT can be uploaded
 * CSVs destination bucket, where all generated file will be uploaded 
+bucket must be in the same region where stack will be created.
 
 To deploy stack, follow these steps:
 * download [lambda code binaries](deployment/binaries/arduino-s3-integration-lambda.zip) and [Cloud Formation Template](deployment/cloud-formation-template/deployment.yaml)
 * Upload CFT and binary zip file on an S3 bucket accessible by the AWS account. For the CFT yaml file, copy the Object URL (it will be required in next step).
+  
+![object URL](docs/objecturl.png)
+
 * Start creation of a new cloud formation stack. Follow these steps:
-* Fill all required parameters (mandatory: Arduino API key and secret, S3 bucket and key where code has been uploaded, destination S3 bucket. Optionally, tag filter for filtering things, organization identifier and samples resolution)
+
+![CFT 1](docs/cft-stack-1.png)
+
+* Fill all required parameters.
+  <br/>**Mandatory**: Arduino API key and secret, S3 bucket where code has been uploaded, destination S3 bucket
+  <br/>**Optional**: tag filter for filtering things, organization identifier and samples resolution
+
+![CFT 2](docs/cft-stack-2.png)
 
 ### Configuration parameters
 
-Here is a list of all configuration properties available in 'Parameter store'. 
+Here is a list of all configuration properties available in 'Parameter store'.
+These parameters are filled by CFT and can be adjusted later in case of need (for example, API keys rotation)
 
 | Parameter | Description |
 | --------- | ----------- |
@@ -61,11 +73,23 @@ Here is a list of all configuration properties available in 'Parameter store'.
 | /arduino/s3-importer/iot/samples-resolution-seconds  | (optional) samples resolution (default: 300s) |
 | /arduino/s3-importer/destination-bucket  | S3 destination bucket |
 
-### Policies
+### Tag filtering
 
-See policies defined in [cloud formation template](deployment/cloud-formation-template/deployment.yaml)
+It is possible to filter only the Things of interest.
+You can use tag filtering if you need to reduce data export to a specific set of Things.
 
-### Compile code
+* Add a tag in Arduino Cloud UI on all Things you want to export. To do that, select a thing and go in 'metadata' section and add a new tag.
+
+
+![tag 1](docs/tag-1.png)
+
+![tag 2](docs/tag-2.png)
+
+* Configure tag filter during CFT creation of by editing '/arduino/s3-importer/iot/filter/tags' parameter.
+
+![tag filter](docs/tag-filter.png)
+
+### Building code
 
 Code requires go v 1.22.
 To compile code:
