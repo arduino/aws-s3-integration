@@ -79,6 +79,7 @@ func HandleRequest(ctx context.Context, dev bool) (*string, error) {
 	}
 	logger.Infoln("key:", *apikey)
 	logger.Infoln("secret:", "*********")
+	logger.Infoln("resolution:", *resolution)
 	if organizationId != "" {
 		logger.Infoln("organizationId:", organizationId)
 	} else {
@@ -98,5 +99,11 @@ func HandleRequest(ctx context.Context, dev bool) (*string, error) {
 }
 
 func main() {
-	HandleRequest(context.Background(), true)
+	msg, err := HandleRequest(context.Background(), true)
+	if err != nil {
+		logrus.Error(err)
+	}
+	if msg != nil {
+		logrus.Info(*msg)
+	}
 }

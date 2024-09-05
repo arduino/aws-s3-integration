@@ -168,7 +168,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 
 			ts := response.Times[i]
 			value := response.Values[i]
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, strconv.FormatFloat(value, 'f', 3, 64)))
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, strconv.FormatFloat(value, 'f', -1, 64)))
 		}
 	}
 
@@ -349,7 +349,7 @@ func interfaceToString(value interface{}) string {
 	case int:
 		return strconv.Itoa(v)
 	case float64:
-		return strconv.FormatFloat(v, 'f', 3, 64)
+		return strconv.FormatFloat(v, 'f', -1, 64)
 	case bool:
 		return strconv.FormatBool(v)
 	default:
