@@ -4,7 +4,7 @@ Description: Arduino S3 data exporter. For deployment and architectural details,
 Parameters:
   LambdaFunctionName:
     Type: String
-    Default: 'arduino-s3-data-exporter'
+    Default: 'arduino-s3-csv-data-exporter'
     Description: Name of the Lambda function.
 
   LambdaCodeS3Bucket:
@@ -38,12 +38,11 @@ Parameters:
   Resolution:
     Type: Number
     Default: 300
-    Description: Samples resolution in seconds. Default is 5 minutes (300s).
+    Description: Samples resolution in seconds. Default is 5 minutes (300s). Set to -1 to export raw data.
 
   DestinationS3Bucket:
     Type: String
-    Default: 'aws-arduino-data-export'
-    Description: S3 bucket where saved samples will be stored.
+    Description: S3 bucket where CSV files will be stored.
 
 Resources:
 
@@ -98,7 +97,7 @@ Resources:
         S3Key:
           Ref: LambdaCodeS3Key
       Runtime: provided.al2
-      Timeout: 900
+      Timeout: 1200
       MemorySize: 256
 
   # Parameters in Parameter Store

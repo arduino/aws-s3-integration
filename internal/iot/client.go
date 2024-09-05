@@ -286,15 +286,17 @@ func (cl *Client) GetTimeSeriesStringSampling(ctx context.Context, properties []
 	}
 
 	requests := make([]iotclient.BatchQuerySampledRequestMediaV1, 0, len(properties))
+	limit := int64(1000)
 	for _, prop := range properties {
 		if prop == "" {
 			continue
 		}
 		requests = append(requests, iotclient.BatchQuerySampledRequestMediaV1{
-			From:     &from,
-			Interval: &interval,
-			Q:        fmt.Sprintf("property.%s", prop),
-			To:       &to,
+			From:        &from,
+			Interval:    &interval,
+			Q:           fmt.Sprintf("property.%s", prop),
+			To:          &to,
+			SeriesLimit: &limit,
 		})
 	}
 
