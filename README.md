@@ -44,8 +44,7 @@ Before stack creation, two S3 buckets has to be created:
 
 To deploy stack, follow these steps:
 * download [lambda code binaries](deployment/binaries/arduino-s3-integration-lambda.zip) and [Cloud Formation Template](deployment/cloud-formation-template/deployment.yaml)
-* Upload CFT and zip files on an S3 bucket accessible by the AWS account. This step is required by CFT procedure.
-* Upload Cloud Formation Templaplate 
+* Upload CFT and binary zip file on an S3 bucket accessible by the AWS account. For the CFT yaml file, copy the Object URL (it will be required in next step).
 * Start creation of a new cloud formation stack. Follow these steps:
 * Fill all required parameters (mandatory: Arduino API key and secret, S3 bucket and key where code has been uploaded, destination S3 bucket. Optionally, tag filter for filtering things, organization identifier and samples resolution)
 

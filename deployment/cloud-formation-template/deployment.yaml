@@ -97,7 +97,7 @@ Resources:
         S3Key:
           Ref: LambdaCodeS3Key
       Runtime: provided.al2
-      Timeout: 1200
+      Timeout: 900
       MemorySize: 256
 
   # Parameters in Parameter Store
@@ -163,6 +163,7 @@ Resources:
       Targets:
         - Arn: !GetAtt LambdaFunction.Arn
           Id: LambdaTarget
+          Input: '{}'
       State: ENABLED
 
   # Permission for EventBridge to invoke Lambda
