@@ -83,9 +83,9 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		res := SamplesResolutionSeconds
 		resolution = &res
 	}
-	if *resolution < 60 || *resolution > 3600 {
+	if *resolution > 3600 {
 		logger.Errorf("Resolution %d is invalid", *resolution)
-		return nil, errors.New("resolution must be between 60 and 3600")
+		return nil, errors.New("resolution must be between -1 and 3600")
 	}
 
 	logger.Infoln("------ Running import...")
@@ -102,6 +102,11 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	}
 	if tags != nil {
 		logger.Infoln("tags:", *tags)
+	}
+	if *resolution <= 0 {
+		logger.Infoln("resolution: raw")
+	} else {
+		logger.Infoln("resolution:", *resolution, "seconds")
 	}
 
 	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket)

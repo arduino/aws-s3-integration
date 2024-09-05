@@ -43,6 +43,27 @@ func NewClient(key, secret, organization string) (*Client, error) {
 	return cl, nil
 }
 
+func (cl *Client) setup(client, secret, organization string) error {
+	baseURL := GetArduinoAPIBaseURL()
+
+	// Configure a token source given the user's credentials.
+	cl.token = NewUserTokenSource(client, secret, baseURL)
+
+	config := iotclient.NewConfiguration()
+	if organization != "" {
+		config.AddDefaultHeader("X-Organization", organization)
+	}
+	config.Servers = iotclient.ServerConfigurations{
+		{
+			URL:         fmt.Sprintf("%s/iot", baseURL),
+			Description: "IoT API endpoint",
+		},
+	}
+	cl.api = iotclient.NewAPIClient(config)
+
+	return nil
+}
+
 // DeviceList retrieves and returns a list of all Arduino IoT Cloud devices
 // belonging to the user performing the request.
 func (cl *Client) DeviceList(ctx context.Context, tags map[string]string) ([]iotclient.ArduinoDevicev2, error) {
@@ -214,50 +235,6 @@ func (cl *Client) ThingTagsDelete(ctx context.Context, id string, keys []string)
 	return nil
 }
 
-func (cl *Client) GetTimeSeries(ctx context.Context, properties []string, from, to time.Time, interval int64) (*iotclient.ArduinoSeriesBatch, bool, error) {
-	if len(properties) == 0 {
-		return nil, false, fmt.Errorf("no properties provided")
-	}
-
-	ctx, err := ctxWithToken(ctx, cl.token)
-	if err != nil {
-		return nil, false, err
-	}
-
-	requests := make([]iotclient.BatchQueryRequestMediaV1, 0, len(properties))
-	for _, prop := range properties {
-		if prop == "" {
-			continue
-		}
-		requests = append(requests, iotclient.BatchQueryRequestMediaV1{
-			From:     from,
-			Interval: &interval,
-			Q:        fmt.Sprintf("property.%s", prop),
-			To:       to,
-		})
-	}
-
-	if len(requests) == 0 {
-		return nil, false, fmt.Errorf("no valid properties provided")
-	}
-
-	batchQueryRequestsMediaV1 := iotclient.BatchQueryRequestsMediaV1{
-		Requests: requests,
-	}
-
-	request := cl.api.SeriesV2Api.SeriesV2BatchQuery(ctx)
-	request = request.BatchQueryRequestsMediaV1(batchQueryRequestsMediaV1)
-	ts, httpResponse, err := cl.api.SeriesV2Api.SeriesV2BatchQueryExecute(request)
-	if err != nil {
-		err = fmt.Errorf("retrieving time series: %w", errorDetail(err))
-		if httpResponse != nil && httpResponse.StatusCode == 429 { // Retry if rate limited
-			return nil, true, err
-		}
-		return nil, false, err
-	}
-	return ts, false, nil
-}
-
 func (cl *Client) GetTimeSeriesByThing(ctx context.Context, thingID string, from, to time.Time, interval int64) (*iotclient.ArduinoSeriesBatch, bool, error) {
 	if thingID == "" {
 		return nil, false, fmt.Errorf("no thing provided")
@@ -309,15 +286,17 @@ func (cl *Client) GetTimeSeriesStringSampling(ctx context.Context, properties []
 	}
 
 	requests := make([]iotclient.BatchQuerySampledRequestMediaV1, 0, len(properties))
+	limit := int64(1000)
 	for _, prop := range properties {
 		if prop == "" {
 			continue
 		}
 		requests = append(requests, iotclient.BatchQuerySampledRequestMediaV1{
-			From:     &from,
-			Interval: &interval,
-			Q:        fmt.Sprintf("property.%s", prop),
-			To:       &to,
+			From:        &from,
+			Interval:    &interval,
+			Q:           fmt.Sprintf("property.%s", prop),
+			To:          &to,
+			SeriesLimit: &limit,
 		})
 	}
 
@@ -342,23 +321,41 @@ func (cl *Client) GetTimeSeriesStringSampling(ctx context.Context, properties []
 	return ts, false, nil
 }
 
-func (cl *Client) setup(client, secret, organization string) error {
-	baseURL := GetArduinoAPIBaseURL()
-
-	// Configure a token source given the user's credentials.
-	cl.token = NewUserTokenSource(client, secret, baseURL)
-
-	config := iotclient.NewConfiguration()
-	if organization != "" {
-		config.AddDefaultHeader("X-Organization", organization)
+func (cl *Client) GetRawTimeSeriesByThing(ctx context.Context, thingID string, from, to time.Time) (*iotclient.ArduinoSeriesRawBatch, bool, error) {
+	if thingID == "" {
+		return nil, false, fmt.Errorf("no thing provided")
 	}
-	config.Servers = iotclient.ServerConfigurations{
+
+	ctx, err := ctxWithToken(ctx, cl.token)
+	if err != nil {
+		return nil, false, err
+	}
+
+	requests := []iotclient.BatchQueryRawRequestMediaV1{
 		{
-			URL:         fmt.Sprintf("%s/iot", baseURL),
-			Description: "IoT API endpoint",
+			From: &from,
+			Q:    fmt.Sprintf("thing.%s", thingID),
+			To:   &to,
 		},
 	}
-	cl.api = iotclient.NewAPIClient(config)
 
-	return nil
+	if len(requests) == 0 {
+		return nil, false, fmt.Errorf("no valid properties provided")
+	}
+
+	batchQueryRequestsMediaV1 := iotclient.BatchQueryRawRequestsMediaV1{
+		Requests: requests,
+	}
+
+	request := cl.api.SeriesV2Api.SeriesV2BatchQueryRaw(ctx)
+	request = request.BatchQueryRawRequestsMediaV1(batchQueryRequestsMediaV1)
+	ts, httpResponse, err := cl.api.SeriesV2Api.SeriesV2BatchQueryRawExecute(request)
+	if err != nil {
+		err = fmt.Errorf("retrieving raw time series: %w", errorDetail(err))
+		if httpResponse != nil && httpResponse.StatusCode == 429 { // Retry if rate limited
+			return nil, true, err
+		}
+		return nil, false, err
+	}
+	return ts, false, nil
 }

@@ -1,13 +1,14 @@
-# Arduino AWS S3 exporter
+# Arduino AWS S3 CSV exporter
 
 This project provides a way to extract time series samples from Arduino cloud, publishing to a S3 destination bucket.
-Things can be filterd by tags.
+Data are extracted at the given resolution via a scheduled Lambda function. Then samples are stored in CSV files and saved to S3.
 
-## Deployment schema
+## Architecture
 
-S3 exporter is based on a Go lambda function triggered by periodic events from EventBridge.
-Job is configured to extract samples for a 60min time window.
-One file is created per run, containing all samples for the given hour. Time series samples are exported in UTC.
+S3 exporter is based on a Go lambda function triggered by periodic event from EventBridge.
+Job is configured to extract samples for a 60min time window with the default resolution of 5min.
+One file is created per execution, containing all samples for selected things. Time series samples are exported at UTC timezone.
+By default, all Arduino things present in the account are exported: it is possible to filter them via tags configuration.
 
 CSV produced has the following structure:
 ```console
@@ -28,19 +29,40 @@ Files are organized in S3 bucket by date and files of the same day are grouped.
 ## Deployment via Cloud Formation Template
 
 It is possible to deploy required resources via [cloud formation template](deployment/cloud-formation-template/deployment.yaml)
-Required steps to deploy project:
-* compile lambda
-```console
-foo@bar:~$ ./compile-lambda.sh
-arduino-s3-integration-lambda.zip archive created
-```
-* Save zip file on an S3 bucket accessible by the AWS account
-* Start creation of a new cloud formation stack provising the [cloud formation template](deployment/cloud-formation-template/deployment.yaml)
-* Fill all required parameters (mandatory: Arduino API key and secret, S3 bucket and key where code has been uploaded, destination S3 bucket. Optionally, tag filter for filtering things, organization identifier and samples resolution)
+
+CFT deployment requires:
+* an AWS account with rights for creating a new CFT stack. Account must have rights to create:
+  * S3 buckets
+  * IAM Roles
+  * Lambda functions
+  * EventBridge rules
+  * SSM parameters (Parameter store)
+
+Before stack creation, two S3 buckets has to be created:
+* a temporary bucket where lambda binaries and CFT can be uploaded
+* CSVs destination bucket, where all generated file will be uploaded 
+bucket must be in the same region where stack will be created.
+
+To deploy stack, follow these steps:
+* download [lambda code binaries](deployment/binaries/arduino-s3-integration-lambda.zip) and [Cloud Formation Template](deployment/cloud-formation-template/deployment.yaml)
+* Upload CFT and binary zip file on an S3 bucket accessible by the AWS account. For the CFT yaml file, copy the Object URL (it will be required in next step).
+  
+![object URL](docs/objecturl.png)
+
+* Start creation of a new cloud formation stack. Follow these steps:
+
+![CFT 1](docs/cft-stack-1.png)
+
+* Fill all required parameters.
+  <br/>**Mandatory**: Arduino API key and secret, S3 bucket where code has been uploaded, destination S3 bucket
+  <br/>**Optional**: tag filter for filtering things, organization identifier and samples resolution
+
+![CFT 2](docs/cft-stack-2.png)
 
 ### Configuration parameters
 
-Here is a list of all configuration properties available in 'Parameter store'. 
+Here is a list of all configuration properties available in 'Parameter store'.
+These parameters are filled by CFT and can be adjusted later in case of need (for example, API keys rotation)
 
 | Parameter | Description |
 | --------- | ----------- |
@@ -51,6 +73,28 @@ Here is a list of all configuration properties available in 'Parameter store'.
 | /arduino/s3-importer/iot/samples-resolution-seconds  | (optional) samples resolution (default: 300s) |
 | /arduino/s3-importer/destination-bucket  | S3 destination bucket |
 
-### Policies
+### Tag filtering
 
-See policies defined in [cloud formation template](deployment/cloud-formation-template/deployment.yaml)
+It is possible to filter only the Things of interest.
+You can use tag filtering if you need to reduce data export to a specific set of Things.
+
+* Add a tag in Arduino Cloud UI on all Things you want to export. To do that, select a thing and go in 'metadata' section and add a new tag.
+
+
+![tag 1](docs/tag-1.png)
+
+![tag 2](docs/tag-2.png)
+
+* Configure tag filter during CFT creation of by editing '/arduino/s3-importer/iot/filter/tags' parameter.
+
+![tag filter](docs/tag-filter.png)
+
+### Building code
+
+Code requires go v 1.22.
+To compile code:
+
+```console
+foo@bar:~$ ./compile-lambda.sh
+arduino-s3-integration-lambda.zip archive created
+```
