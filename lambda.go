@@ -103,6 +103,11 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	if tags != nil {
 		logger.Infoln("tags:", *tags)
 	}
+	if *resolution <= 0 {
+		logger.Infoln("resolution: raw")
+	} else {
+		logger.Infoln("resolution:", *resolution, "seconds")
+	}
 
 	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket)
 	if err != nil {

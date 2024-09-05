@@ -133,7 +133,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	if resolution <= 60 {
 		resolution = 60
 	}
-	
+
 	var batched *iotclient.ArduinoSeriesBatch
 	var err error
 	var retry bool
@@ -315,7 +315,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 		}
 
 		propertyID := strings.Replace(response.Query, "property.", "", 1)
-		a.logger.Debugf("Thing %s - Property %s - %d values\n", thingID, propertyID, response.CountValues)
+		a.logger.Infof("Thing %s - Query %s Property %s - %d values\n", thingID, response.Query, propertyID, response.CountValues)
 		sampleCount += response.CountValues
 
 		propertyName := extractPropertyName(thing, propertyID)
