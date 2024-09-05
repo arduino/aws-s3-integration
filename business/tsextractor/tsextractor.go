@@ -162,13 +162,13 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 		a.logger.Debugf("Thing %s - Property %s - %d values\n", thingID, propertyID, response.CountValues)
 		sampleCount += response.CountValues
 
-		propertyName := extractPropertyName(thing, propertyID)
+		propertyName, propertyType := extractPropertyNameAndType(thing, propertyID)
 
 		for i := 0; i < len(response.Times); i++ {
 
 			ts := response.Times[i]
 			value := response.Values[i]
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, strconv.FormatFloat(value, 'f', -1, 64)))
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, strconv.FormatFloat(value, 'f', -1, 64)))
 		}
 	}
 
@@ -183,26 +183,29 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	return nil
 }
 
-func composeRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, value string) []string {
-	row := make([]string, 6)
+func composeRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, propertyType string, value string) []string {
+	row := make([]string, 7)
 	row[0] = ts.UTC().Format(time.RFC3339)
 	row[1] = thingID
 	row[2] = thingName
 	row[3] = propertyID
 	row[4] = propertyName
-	row[5] = value
+	row[5] = propertyType
+	row[6] = value
 	return row
 }
 
-func extractPropertyName(thing iotclient.ArduinoThing, propertyID string) string {
+func extractPropertyNameAndType(thing iotclient.ArduinoThing, propertyID string) (string, string) {
 	propertyName := ""
+	propertyType := ""
 	for _, prop := range thing.Properties {
 		if prop.Id == propertyID {
 			propertyName = prop.Name
+			propertyType = prop.Type
 			break
 		}
 	}
-	return propertyName
+	return propertyName, propertyType
 }
 
 func isStringProperty(ptype string) bool {
@@ -258,7 +261,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 		a.logger.Debugf("Thing %s - String Property %s - %d values\n", thingID, propertyID, response.CountValues)
 		sampleCount += response.CountValues
 
-		propertyName := extractPropertyName(thing, propertyID)
+		propertyName, propertyType := extractPropertyNameAndType(thing, propertyID)
 
 		for i := 0; i < len(response.Times); i++ {
 
@@ -267,7 +270,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, interfaceToString(value)))
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value)))
 		}
 	}
 
@@ -318,7 +321,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 		a.logger.Infof("Thing %s - Query %s Property %s - %d values\n", thingID, response.Query, propertyID, response.CountValues)
 		sampleCount += response.CountValues
 
-		propertyName := extractPropertyName(thing, propertyID)
+		propertyName, propertyType := extractPropertyNameAndType(thing, propertyID)
 
 		for i := 0; i < len(response.Times); i++ {
 
@@ -327,7 +330,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, interfaceToString(value)))
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value)))
 		}
 	}
 

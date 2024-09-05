@@ -15,7 +15,7 @@ const (
 	baseTmpStorage = "/tmp"
 )
 
-var csvHeader = []string{"timestamp", "thing_id", "thing_name", "property_id", "property_name", "value"}
+var csvHeader = []string{"timestamp", "thing_id", "thing_name", "property_id", "property_name", "property_type", "value"}
 
 func NewWriter(destinationHour time.Time, logger *logrus.Entry) (*CsvWriter, error) {
 	filePath := fmt.Sprintf("%s/%s.csv", baseTmpStorage, destinationHour.Format("2006-01-02-15:04"))
