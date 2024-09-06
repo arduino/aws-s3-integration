@@ -20,7 +20,7 @@ version: "3"
 
 vars:
   CONTAINER: "docker.elastic.co/beats-dev/golang-crossbuild"
-  GO_VERSION: "1.22"
+  GO_VERSION: "1.22.6"
   CHECKSUM_FILE: "{{.VERSION}}-checksums.txt"
 
 tasks:
@@ -45,7 +45,7 @@ tasks:
 
     vars:
       PLATFORM_DIR: "{{.PROJECT_NAME}}_linux_amd64"
-      BUILD_COMMAND: "go build -o {{.DIST_DIR}}/{{.PLATFORM_DIR}}/{{.PROJECT_NAME}} {{.LDFLAGS}}"
+      BUILD_COMMAND: "GOOS=linux CGO_ENABLED=0 go build -o {{.DIST_DIR}}/{{.PLATFORM_DIR}}/bootstrap -tags lambda.norpc lambda.go"
       BUILD_PLATFORM: "linux/amd64"
       CONTAINER_TAG: "{{.GO_VERSION}}-main"
       PACKAGE_PLATFORM: "Linux_64bit"

@@ -10,7 +10,7 @@ vars:
   DEFAULT_GO_PACKAGES:
     sh: |
       echo $(cd {{default .DEFAULT_GO_MODULE_PATH .GO_MODULE_PATH}} && go list ./... | tr '\n' ' ' || echo '"ERROR: Unable to discover Go packages"')
-  PROJECT_NAME: "arduino-cloud-cli"
+  PROJECT_NAME: "aws-s3-integration"
   DIST_DIR: "dist"
   # build vars
   COMMIT:
@@ -22,7 +22,7 @@ vars:
   TAG:
     sh: echo "$(git tag --points-at=HEAD 2> /dev/null | head -n1)"
   VERSION: "{{if .NIGHTLY}}nightly-{{.TIMESTAMP_SHORT}}{{else if .TAG}}{{.TAG}}{{else}}{{.PACKAGE_NAME_PREFIX}}git-snapshot{{end}}"
-  CONFIGURATION_PACKAGE: github.com/arduino/arduino-cloud-cli/version
+  CONFIGURATION_PACKAGE: github.com/arduino/aws-s3-integration/version
 
 tasks:
   # Source: https://github.com/arduino/tooling-project-assets/blob/main/workflow-templates/assets/go-task/Taskfile.yml
