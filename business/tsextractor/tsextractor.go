@@ -23,6 +23,9 @@ import (
 	"sync"
 	"time"
 
+	"crypto/rand"
+	"math/big"
+
 	"github.com/arduino/aws-s3-integration/internal/csv"
 	"github.com/arduino/aws-s3-integration/internal/iot"
 	"github.com/arduino/aws-s3-integration/internal/s3"
@@ -121,6 +124,17 @@ func (a *TsExtractor) ExportTSToS3(
 	return nil
 }
 
+func randomRateLimitingSleep() {
+	// Random sleep to avoid rate limiting (1s + random(0-500ms))
+	n, err := rand.Int(rand.Reader, big.NewInt(500))
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	randomSleep := n.Int64() + 1000
+	time.Sleep(time.Duration(randomSleep) * time.Millisecond)
+}
+
 func (a *TsExtractor) populateNumericTSDataIntoS3(
 	ctx context.Context,
 	from time.Time,
@@ -144,7 +158,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
 			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
-			time.Sleep(1 * time.Second)
+			randomRateLimitingSleep()
 		}
 	}
 	if err != nil {
@@ -205,6 +219,9 @@ func extractPropertyNameAndType(thing iotclient.ArduinoThing, propertyID string)
 			break
 		}
 	}
+	if propertyType == "STATUS" {
+		propertyType = "BOOLEAN"
+	}
 	return propertyName, propertyType
 }
 
@@ -243,7 +260,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
 			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
-			time.Sleep(1 * time.Second)
+			randomRateLimitingSleep()
 		}
 	}
 	if err != nil {
@@ -303,7 +320,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
 			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
-			time.Sleep(1 * time.Second)
+			randomRateLimitingSleep()
 		}
 	}
 	if err != nil {
