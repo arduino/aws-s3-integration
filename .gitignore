@@ -23,3 +23,5 @@ vendor/
 cover.out
 
 dist/
+
+coverage_unit.txt

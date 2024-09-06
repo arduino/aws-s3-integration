@@ -40,7 +40,10 @@ tasks:
         --build-cmd "{{.BUILD_COMMAND}}" \
         -p "{{.BUILD_PLATFORM}}"
 
-        tar cz -C {{.PLATFORM_DIR}} {{.PROJECT_NAME}} -C ../.. LICENSE.txt -f {{.PACKAGE_NAME}}
+        cp {{.PLATFORM_DIR}}/bootstrap bootstrap
+        cp ../LICENSE LICENSE
+        zip {{.PACKAGE_NAME}} bootstrap LICENSE
+        rm bootstrap LICENSE
         sha256sum {{.PACKAGE_NAME}} >> {{.CHECKSUM_FILE}}
 
     vars:
@@ -49,4 +52,4 @@ tasks:
       BUILD_PLATFORM: "linux/amd64"
       CONTAINER_TAG: "{{.GO_VERSION}}-main"
       PACKAGE_PLATFORM: "Linux_64bit"
-      PACKAGE_NAME: "{{.PROJECT_NAME}}_{{.VERSION}}_{{.PACKAGE_PLATFORM}}.tar.gz"
+      PACKAGE_NAME: "{{.PROJECT_NAME}}_{{.VERSION}}_{{.PACKAGE_PLATFORM}}.zip"
