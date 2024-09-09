@@ -63,3 +63,7 @@ func (s *S3Client) WriteFile(ctx context.Context, key, filePath string) error {
 	}
 	return nil
 }
+
+func (s *S3Client) DestinationBucket() string {
+	return s.bucketName
+}
