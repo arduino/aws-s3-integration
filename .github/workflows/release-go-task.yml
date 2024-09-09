@@ -41,7 +41,7 @@ jobs:
         run: task dist:all
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           if-no-files-found: error
           name: ${{ env.ARTIFACT_NAME }}
@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.DIST_DIR }}
