@@ -34,6 +34,7 @@ import (
 )
 
 const importConcurrency = 10
+const retryCount = 5
 
 type TsExtractor struct {
 	iotcl  *iot.Client
@@ -117,6 +118,7 @@ func (a *TsExtractor) ExportTSToS3(
 	defer writer.Delete()
 
 	destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15"))
+	a.logger.Infof("Uploading file %s to bucket %s\n", destinationKey, s3cl.DestinationBucket())
 	if err := s3cl.WriteFile(ctx, destinationKey, writer.GetFilePath()); err != nil {
 		return err
 	}
@@ -151,7 +153,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	var batched *iotclient.ArduinoSeriesBatch
 	var err error
 	var retry bool
-	for i := 0; i < 3; i++ {
+	for i := 0; i < retryCount; i++ {
 		batched, retry, err = a.iotcl.GetTimeSeriesByThing(ctx, thingID, from, to, int64(resolution))
 		if !retry {
 			break
@@ -253,7 +255,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 	var batched *iotclient.ArduinoSeriesBatchSampled
 	var err error
 	var retry bool
-	for i := 0; i < 3; i++ {
+	for i := 0; i < retryCount; i++ {
 		batched, retry, err = a.iotcl.GetTimeSeriesStringSampling(ctx, stringProperties, from, to, int32(resolution))
 		if !retry {
 			break
@@ -313,7 +315,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 	var batched *iotclient.ArduinoSeriesRawBatch
 	var err error
 	var retry bool
-	for i := 0; i < 3; i++ {
+	for i := 0; i < retryCount; i++ {
 		batched, retry, err = a.iotcl.GetRawTimeSeriesByThing(ctx, thingID, from, to)
 		if !retry {
 			break
