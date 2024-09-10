@@ -81,6 +81,55 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	}
 
 	// Resolve resolution
+	resolution, err := configureExtractionResolution(logger, paramReader)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve scheduling
+	extractionWindowMinutes, err := configureDataExtractionTimeWindow(logger, paramReader)
+	if err != nil {
+		return nil, err
+	}
+
+	if *extractionWindowMinutes > 60 && *resolution <= 60 {
+		logger.Warn("Resolution must be greater than 60 seconds for time windows greater than 60 minutes. Setting resolution to 5 minutes.")
+		defReso := SamplesResolutionSeconds
+		resolution = &defReso
+	}
+
+	logger.Infoln("------ Running import...")
+	if event.Dev || os.Getenv("DEV") == "true" {
+		logger.Infoln("Running in dev mode")
+		os.Setenv("IOT_API_URL", "https://api2.oniudra.cc")
+	}
+	logger.Infoln("key:", *apikey)
+	logger.Infoln("secret:", "*********")
+	if organizationId != "" {
+		logger.Infoln("organizationId:", organizationId)
+	} else {
+		logger.Infoln("organizationId: not set")
+	}
+	if tags != nil {
+		logger.Infoln("tags:", *tags)
+	}
+	if *resolution <= 0 {
+		logger.Infoln("resolution: raw")
+	} else {
+		logger.Infoln("resolution:", *resolution, "seconds")
+	}
+	logger.Infoln("data extraction time windows:", extractionWindowMinutes, "minutes")
+
+	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket)
+	if err != nil {
+		return nil, err
+	}
+
+	message := "Data exported successfully"
+	return &message, nil
+}
+
+func configureExtractionResolution(logger *logrus.Entry, paramReader *parameters.ParametersClient) (*int, error) {
 	resolution, err := paramReader.ReadIntConfig(SamplesResoSec)
 	if err != nil {
 		// Possibly this parameter is not set. Try SamplesReso
@@ -108,8 +157,10 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		logger.Errorf("Resolution %d is invalid", *resolution)
 		return nil, errors.New("resolution must be between -1 and 3600")
 	}
+	return resolution, nil
+}
 
-	// Resolve scheduling
+func configureDataExtractionTimeWindow(logger *logrus.Entry, paramReader *parameters.ParametersClient) (*int, error) {
 	schedule, err := paramReader.ReadConfig(Scheduling)
 	if err != nil {
 		logger.Error("Error reading parameter "+Scheduling, err)
@@ -126,36 +177,7 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	case "1 day":
 		extractionWindowMinutes = 24 * 60
 	}
-
-	logger.Infoln("------ Running import...")
-	if event.Dev || os.Getenv("DEV") == "true" {
-		logger.Infoln("Running in dev mode")
-		os.Setenv("IOT_API_URL", "https://api2.oniudra.cc")
-	}
-	logger.Infoln("key:", *apikey)
-	logger.Infoln("secret:", "*********")
-	if organizationId != "" {
-		logger.Infoln("organizationId:", organizationId)
-	} else {
-		logger.Infoln("organizationId: not set")
-	}
-	if tags != nil {
-		logger.Infoln("tags:", *tags)
-	}
-	if *resolution <= 0 {
-		logger.Infoln("resolution: raw")
-	} else {
-		logger.Infoln("resolution:", *resolution, "seconds")
-	}
-	logger.Infoln("data extraction time windows:", extractionWindowMinutes, "minutes")
-
-	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, extractionWindowMinutes, *destinationS3Bucket)
-	if err != nil {
-		return nil, err
-	}
-
-	message := "Data exported successfully"
-	return &message, nil
+	return &extractionWindowMinutes, nil
 }
 
 func main() {

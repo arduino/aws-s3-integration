@@ -45,6 +45,16 @@ func New(iotcl *iot.Client, logger *logrus.Entry) *TsExtractor {
 	return &TsExtractor{iotcl: iotcl, logger: logger}
 }
 
+func computeTimeAlignment(resolutionSeconds, timeWindowInMinutes int) (time.Time, time.Time) {
+	// Compute time alignment
+	if resolutionSeconds <= 60 {
+		resolutionSeconds = 300 // Align to 5 minutes
+	}
+	to := time.Now().Truncate(time.Duration(resolutionSeconds) * time.Second).UTC()
+	from := to.Add(-time.Duration(timeWindowInMinutes) * time.Minute)
+	return from, to
+}
+
 func (a *TsExtractor) ExportTSToS3(
 	ctx context.Context,
 	timeWindowInMinutes int,
@@ -53,8 +63,7 @@ func (a *TsExtractor) ExportTSToS3(
 	destinationS3Bucket string) error {
 
 	// Truncate time to given resolution
-	to := time.Now().Truncate(time.Duration(resolution) * time.Second).UTC()
-	from := to.Add(-time.Duration(timeWindowInMinutes) * time.Minute)
+	from, to := computeTimeAlignment(resolution, timeWindowInMinutes)
 
 	// Open s3 output writer
 	s3cl, err := s3.NewS3Client(destinationS3Bucket)

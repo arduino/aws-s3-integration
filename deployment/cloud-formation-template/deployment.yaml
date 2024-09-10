@@ -42,7 +42,7 @@ Parameters:
 
   Resolution:
       Type: String
-      Description: "Samples resolution data extraction resolution."
+      Description: "Samples resolution data extraction resolution. 'raw' and '1 minute' are not supported for '1 day' scheduling"
       AllowedValues:
         - raw
         - 1 minute
