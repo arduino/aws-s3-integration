@@ -171,6 +171,15 @@ Resources:
         Ref: DestinationS3Bucket
       Tier: Standard
 
+  ExecutionSchedulingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /arduino/s3-importer/iot/scheduling
+      Type: String
+      Value:
+        Ref: ExecutionScheduling
+      Tier: Standard
+
   # EventBridge Rule to trigger Lambda every hour
   EventBridgeRule:
     Type: AWS::Events::Rule

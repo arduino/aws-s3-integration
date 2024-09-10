@@ -52,7 +52,8 @@ func (a *TsExtractor) ExportTSToS3(
 	resolution int,
 	destinationS3Bucket string) error {
 
-	to := time.Now().Truncate(time.Hour).UTC()
+	// Truncate time to given resolution
+	to := time.Now().Truncate(time.Duration(resolution) * time.Second).UTC()
 	from := to.Add(-time.Duration(timeWindowInMinutes) * time.Minute)
 
 	// Open s3 output writer

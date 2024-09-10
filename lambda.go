@@ -31,16 +31,17 @@ type AWSS3ImportTrigger struct {
 }
 
 const (
-	ArduinoPrefix               = "/arduino/s3-importer"
-	IoTApiKey                   = ArduinoPrefix + "/iot/api-key"
-	IoTApiSecret                = ArduinoPrefix + "/iot/api-secret"
-	IoTApiOrgId                 = ArduinoPrefix + "/iot/org-id"
-	IoTApiTags                  = ArduinoPrefix + "/iot/filter/tags"
-	SamplesResoSec              = ArduinoPrefix + "/iot/samples-resolution-seconds"
-	SamplesReso                 = ArduinoPrefix + "/iot/samples-resolution"
-	DestinationS3Bucket         = ArduinoPrefix + "/destination-bucket"
-	SamplesResolutionSeconds    = 300
-	TimeExtractionWindowMinutes = 60
+	ArduinoPrefix                      = "/arduino/s3-importer"
+	IoTApiKey                          = ArduinoPrefix + "/iot/api-key"
+	IoTApiSecret                       = ArduinoPrefix + "/iot/api-secret"
+	IoTApiOrgId                        = ArduinoPrefix + "/iot/org-id"
+	IoTApiTags                         = ArduinoPrefix + "/iot/filter/tags"
+	SamplesResoSec                     = ArduinoPrefix + "/iot/samples-resolution-seconds"
+	SamplesReso                        = ArduinoPrefix + "/iot/samples-resolution"
+	Scheduling                         = ArduinoPrefix + "/iot/scheduling"
+	DestinationS3Bucket                = ArduinoPrefix + "/destination-bucket"
+	SamplesResolutionSeconds           = 300
+	DefaultTimeExtractionWindowMinutes = 60
 )
 
 func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, error) {
@@ -78,6 +79,8 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	if tagsParam != nil {
 		tags = tagsParam
 	}
+
+	// Resolve resolution
 	resolution, err := paramReader.ReadIntConfig(SamplesResoSec)
 	if err != nil {
 		// Possibly this parameter is not set. Try SamplesReso
@@ -101,10 +104,27 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		}
 		resolution = &val
 	}
-
 	if *resolution > 3600 {
 		logger.Errorf("Resolution %d is invalid", *resolution)
 		return nil, errors.New("resolution must be between -1 and 3600")
+	}
+
+	// Resolve scheduling
+	schedule, err := paramReader.ReadConfig(Scheduling)
+	if err != nil {
+		logger.Error("Error reading parameter "+Scheduling, err)
+		return nil, err
+	}
+	extractionWindowMinutes := DefaultTimeExtractionWindowMinutes
+	switch *schedule {
+	case "5 minutes":
+		extractionWindowMinutes = 5
+	case "15 minutes":
+		extractionWindowMinutes = 15
+	case "1 hour":
+		extractionWindowMinutes = 60
+	case "1 day":
+		extractionWindowMinutes = 24 * 60
 	}
 
 	logger.Infoln("------ Running import...")
@@ -127,8 +147,9 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	} else {
 		logger.Infoln("resolution:", *resolution, "seconds")
 	}
+	logger.Infoln("data extraction time windows:", extractionWindowMinutes, "minutes")
 
-	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket)
+	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, extractionWindowMinutes, *destinationS3Bucket)
 	if err != nil {
 		return nil, err
 	}
