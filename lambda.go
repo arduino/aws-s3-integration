@@ -37,6 +37,7 @@ const (
 	IoTApiOrgId                 = ArduinoPrefix + "/iot/org-id"
 	IoTApiTags                  = ArduinoPrefix + "/iot/filter/tags"
 	SamplesResoSec              = ArduinoPrefix + "/iot/samples-resolution-seconds"
+	SamplesReso                 = ArduinoPrefix + "/iot/samples-resolution"
 	DestinationS3Bucket         = ArduinoPrefix + "/destination-bucket"
 	SamplesResolutionSeconds    = 300
 	TimeExtractionWindowMinutes = 60
@@ -79,10 +80,28 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	}
 	resolution, err := paramReader.ReadIntConfig(SamplesResoSec)
 	if err != nil {
-		logger.Warn("Error reading parameter "+SamplesResoSec+". Set resolution to default value", err)
-		res := SamplesResolutionSeconds
-		resolution = &res
+		// Possibly this parameter is not set. Try SamplesReso
+		res, err := paramReader.ReadConfig(SamplesReso)
+		if err != nil {
+			logger.Error("Error reading parameter "+SamplesReso, err)
+			return nil, err
+		}
+		val := SamplesResolutionSeconds
+		switch *res {
+		case "raw":
+			val = -1
+		case "1m":
+			val = 60
+		case "5m":
+			val = 300
+		case "15m":
+			val = 900
+		case "1h":
+			val = 3600
+		}
+		resolution = &val
 	}
+
 	if *resolution > 3600 {
 		logger.Errorf("Resolution %d is invalid", *resolution)
 		return nil, errors.New("resolution must be between -1 and 3600")

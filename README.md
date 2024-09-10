@@ -71,7 +71,7 @@ These parameters are filled by CFT at stack creation time and can be adjusted la
 | /arduino/s3-importer/iot/api-secret | IoT API secret |
 | /arduino/s3-importer/iot/org-id    | (optional) organization id |
 | /arduino/s3-importer/iot/filter/tags    | (optional) tags filtering. Syntax: tag=value,tag2=value2  |
-| /arduino/s3-importer/iot/samples-resolution-seconds  | (optional) samples resolution (default: 300s) |
+| /arduino/s3-importer/iot/samples-resolution  | (optional) samples aggregation resolution (1/5/15 minutes, 1 hour, raw) |
 | /arduino/s3-importer/destination-bucket  | S3 destination bucket |
 
 ### Tag filtering

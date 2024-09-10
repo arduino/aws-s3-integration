@@ -30,15 +30,31 @@ Parameters:
     Default: '<empty>'
     Description: Arduino Organization ID (optional).
 
+  ExecutionScheduling:
+      Type: String
+      Description: "Choose the execution scheduling for the data export"
+      AllowedValues:
+        - 5 minutes
+        - 15 minutes
+        - 1 hour
+        - 1 day
+      Default: 1 hour
+
+  Resolution:
+      Type: String
+      Description: "Samples resolution data extraction resolution."
+      AllowedValues:
+        - raw
+        - 1 minute
+        - 5 minutes
+        - 15 minutes
+        - 1 hour
+      Default: 1 hour
+
   TagFilter:
     Type: String
     Default: '<empty>'
     Description: Filter things to import by tag (optional). Format> tag1=value1,tag2=value2
-
-  Resolution:
-    Type: Number
-    Default: 300
-    Description: Samples resolution in seconds. Default is 5 minutes (300s). Set to -1 to export raw data.
 
   DestinationS3Bucket:
     Type: String
@@ -140,7 +156,7 @@ Resources:
   ResolutionParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /arduino/s3-importer/iot/samples-resolution-seconds
+      Name: /arduino/s3-importer/iot/samples-resolution
       Type: String
       Value:
         Ref: Resolution
@@ -159,7 +175,8 @@ Resources:
   EventBridgeRule:
     Type: AWS::Events::Rule
     Properties:
-      ScheduleExpression: cron(10 * * * ? *)
+      ScheduleExpression:
+        Fn::Sub: "rate(${ExecutionScheduling})"
       Targets:
         - Arn: !GetAtt LambdaFunction.Arn
           Id: LambdaTarget
