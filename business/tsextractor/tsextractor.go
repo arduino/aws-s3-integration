@@ -71,7 +71,7 @@ func (a *TsExtractor) ExportTSToS3(
 	var wg sync.WaitGroup
 	tokens := make(chan struct{}, importConcurrency)
 
-	a.logger.Infoln("=====> Export perf data - time window: ", timeWindowInMinutes, " minutes")
+	a.logger.Infoln("=====> Exporting data - time window: ", timeWindowInMinutes, " minutes. Resolution: ", resolution, " seconds")
 	for thingID, thing := range thingsMap {
 
 		if thing.Properties == nil || len(thing.Properties) == 0 {
@@ -79,8 +79,8 @@ func (a *TsExtractor) ExportTSToS3(
 			continue
 		}
 
-		wg.Add(1)
 		tokens <- struct{}{}
+		wg.Add(1)
 
 		go func(thingID string, thing iotclient.ArduinoThing, writer *csv.CsvWriter) {
 			defer func() { <-tokens }()
@@ -112,6 +112,7 @@ func (a *TsExtractor) ExportTSToS3(
 	}
 
 	// Wait for all routines termination
+	a.logger.Infoln("Waiting for all data extraction jobs to terminate...")
 	wg.Wait()
 
 	// Close csv output writer and upload to s3
@@ -160,7 +161,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 			break
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
-			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
 			randomRateLimitingSleep()
 		}
 	}
@@ -262,7 +263,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			break
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
-			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
 			randomRateLimitingSleep()
 		}
 	}
@@ -322,7 +323,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 			break
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
-			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
 			randomRateLimitingSleep()
 		}
 	}
