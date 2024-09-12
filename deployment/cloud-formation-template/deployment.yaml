@@ -49,7 +49,7 @@ Parameters:
         - 5 minutes
         - 15 minutes
         - 1 hour
-      Default: 1 hour
+      Default: 5 minutes
 
   TagFilter:
     Type: String
