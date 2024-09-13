@@ -23,5 +23,6 @@ vendor/
 cover.out
 
 dist/
+deployment/binaries/
 
 coverage_unit.txt

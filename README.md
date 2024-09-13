@@ -2,7 +2,9 @@
 
 This project provides a way to extract time series samples from Arduino cloud, publishing to a S3 destination bucket.
 Data are extracted at the given resolution via a scheduled Lambda function. Then samples are stored in CSV files and saved to S3.
-By default, data extraction is performed every hour, extracting samples aggregated at 5min resolution. Non numeric values like strings are sampled at the given resolution.
+By default, data extraction is performed every hour (configurable), extracting samples aggregated at 5min resolution (configurable).
+Aggregation is performed as average over aggregation period.
+Non numeric values like strings are sampled at the given resolution.
 
 ## Architecture
 
@@ -22,9 +24,9 @@ timestamp,thing_id,thing_name,property_id,property_name,property_type,value
 
 Files are organized by date and files of the same day are grouped.
 ```
-<bucket>:2024-09-04/2024-09-04-10.csv
-<bucket>:2024-09-04/2024-09-04-11.csv
-<bucket>:2024-09-04/2024-09-04-12.csv
+<bucket>:2024-09-04/2024-09-04-10-00.csv
+<bucket>:2024-09-04/2024-09-04-11-00.csv
+<bucket>:2024-09-04/2024-09-04-12-00.csv
 ```
 
 ## Deployment via Cloud Formation Template
@@ -45,7 +47,7 @@ Before stack creation, two S3 buckets have to be created:
 bucket must be in the same region where stack will be created.
 
 Follow these steps to deploy a new stack:
-* download [lambda code binaries](deployment/binaries/arduino-s3-integration-lambda.zip) and [Cloud Formation Template](deployment/cloud-formation-template/deployment.yaml)
+* download [lambda code binaries](https://github.com/arduino/aws-s3-integration/releases) and [Cloud Formation Template](deployment/cloud-formation-template/deployment.yaml)
 * upload CFT and binary zip file on an S3 bucket accessible by the AWS account. For the CFT yaml file, copy the Object URL (it will be required in next step).
   
 ![object URL](docs/objecturl.png)
@@ -67,12 +69,13 @@ These parameters are filled by CFT at stack creation time and can be adjusted la
 
 | Parameter | Description |
 | --------- | ----------- |
-| /arduino/s3-importer/iot/api-key  | IoT API key |
-| /arduino/s3-importer/iot/api-secret | IoT API secret |
-| /arduino/s3-importer/iot/org-id    | (optional) organization id |
-| /arduino/s3-importer/iot/filter/tags    | (optional) tags filtering. Syntax: tag=value,tag2=value2  |
-| /arduino/s3-importer/iot/samples-resolution-seconds  | (optional) samples resolution (default: 300s) |
-| /arduino/s3-importer/destination-bucket  | S3 destination bucket |
+| /arduino/s3-exporter/<stack-name>/iot/api-key  | IoT API key |
+| /arduino/s3-exporter/<stack-name>/iot/api-secret | IoT API secret |
+| /arduino/s3-exporter/<stack-name>/iot/org-id    | (optional) organization id |
+| /arduino/s3-exporter/<stack-name>/iot/filter/tags    | (optional) tags filtering. Syntax: tag=value,tag2=value2  |
+| /arduino/s3-exporter/<stack-name>/iot/samples-resolution  | (optional) samples aggregation resolution (1/5/15 minutes, 1 hour, raw) |
+| /arduino/s3-exporter/<stack-name>/destination-bucket  | S3 destination bucket |
+| /arduino/s3-exporter/<stack-name>/iot/scheduling | Execution scheduling |
 
 ### Tag filtering
 
@@ -85,7 +88,7 @@ You can use tag filtering if you need to reduce export to a specific set of Thin
 
 ![tag 1](docs/tag-1.png)
 
-* Configure tag filter during CFT creation of by editing '/arduino/s3-importer/iot/filter/tags' parameter (syntax: tag1=value1,tag2=value2).
+* Configure tag filter during CFT creation of by editing '/arduino/s3-exporter/<stack-name>/iot/filter/tags' parameter (syntax: tag1=value1,tag2=value2).
 
 ![tag filter](docs/tag-filter.png)
 

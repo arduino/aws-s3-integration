@@ -45,6 +45,16 @@ func New(iotcl *iot.Client, logger *logrus.Entry) *TsExtractor {
 	return &TsExtractor{iotcl: iotcl, logger: logger}
 }
 
+func computeTimeAlignment(resolutionSeconds, timeWindowInMinutes int) (time.Time, time.Time) {
+	// Compute time alignment
+	if resolutionSeconds <= 60 {
+		resolutionSeconds = 300 // Align to 5 minutes
+	}
+	to := time.Now().Truncate(time.Duration(resolutionSeconds) * time.Second).UTC()
+	from := to.Add(-time.Duration(timeWindowInMinutes) * time.Minute)
+	return from, to
+}
+
 func (a *TsExtractor) ExportTSToS3(
 	ctx context.Context,
 	timeWindowInMinutes int,
@@ -52,8 +62,8 @@ func (a *TsExtractor) ExportTSToS3(
 	resolution int,
 	destinationS3Bucket string) error {
 
-	to := time.Now().Truncate(time.Hour).UTC()
-	from := to.Add(-time.Duration(timeWindowInMinutes) * time.Minute)
+	// Truncate time to given resolution
+	from, to := computeTimeAlignment(resolution, timeWindowInMinutes)
 
 	// Open s3 output writer
 	s3cl, err := s3.NewS3Client(destinationS3Bucket)
@@ -70,7 +80,7 @@ func (a *TsExtractor) ExportTSToS3(
 	var wg sync.WaitGroup
 	tokens := make(chan struct{}, importConcurrency)
 
-	a.logger.Infoln("=====> Export perf data - time window: ", timeWindowInMinutes, " minutes")
+	a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to)
 	for thingID, thing := range thingsMap {
 
 		if thing.Properties == nil || len(thing.Properties) == 0 {
@@ -78,8 +88,8 @@ func (a *TsExtractor) ExportTSToS3(
 			continue
 		}
 
-		wg.Add(1)
 		tokens <- struct{}{}
+		wg.Add(1)
 
 		go func(thingID string, thing iotclient.ArduinoThing, writer *csv.CsvWriter) {
 			defer func() { <-tokens }()
@@ -111,13 +121,14 @@ func (a *TsExtractor) ExportTSToS3(
 	}
 
 	// Wait for all routines termination
+	a.logger.Infoln("Waiting for all data extraction jobs to terminate...")
 	wg.Wait()
 
 	// Close csv output writer and upload to s3
 	writer.Close()
 	defer writer.Delete()
 
-	destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15"))
+	destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
 	a.logger.Infof("Uploading file %s to bucket %s\n", destinationKey, s3cl.DestinationBucket())
 	if err := s3cl.WriteFile(ctx, destinationKey, writer.GetFilePath()); err != nil {
 		return err
@@ -159,7 +170,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 			break
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
-			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
 			randomRateLimitingSleep()
 		}
 	}
@@ -261,7 +272,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			break
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
-			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
 			randomRateLimitingSleep()
 		}
 	}
@@ -321,7 +332,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 			break
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
-			a.logger.Infof("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
 			randomRateLimitingSleep()
 		}
 	}
@@ -337,7 +348,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 		}
 
 		propertyID := strings.Replace(response.Query, "property.", "", 1)
-		a.logger.Infof("Thing %s - Query %s Property %s - %d values\n", thingID, response.Query, propertyID, response.CountValues)
+		a.logger.Debugf("Thing %s - Query %s Property %s - %d values\n", thingID, response.Query, propertyID, response.CountValues)
 		sampleCount += response.CountValues
 
 		propertyName, propertyType := extractPropertyNameAndType(thing, propertyID)
