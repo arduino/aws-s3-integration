@@ -173,34 +173,40 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 
 func configureExtractionResolution(logger *logrus.Entry, paramReader *parameters.ParametersClient, stack string) (*int, error) {
 	var resolution *int
+	var res *string
 	var err error
 	if stack != "" {
-		resolution, err = paramReader.ReadIntConfigByStack(SamplesResoStack, stack)
+		res, err = paramReader.ReadConfigByStack(SamplesResoStack, stack)
+		if err != nil {
+			logger.Error("Error reading parameter "+paramReader.ResolveParameter(SamplesResoStack, stack), err)
+		}
 	} else {
 		resolution, err = paramReader.ReadIntConfig(SamplesReso)
-	}
-	if err != nil {
-		// Possibly this parameter is not set. Try SamplesReso
-		res, err := paramReader.ReadConfig(SamplesReso)
 		if err != nil {
-			logger.Error("Error reading parameter "+SamplesReso, err)
-			return nil, err
+			// Possibly this parameter is not set. Try SamplesReso
+			res, err = paramReader.ReadConfig(SamplesReso)
+			if err != nil {
+				logger.Error("Error reading parameter "+SamplesReso, err)
+				return nil, err
+			}
+		} else {
+			return resolution, nil
 		}
-		val := SamplesResolutionSeconds
-		switch *res {
-		case "raw":
-			val = -1
-		case "1m":
-			val = 60
-		case "5m":
-			val = 300
-		case "15m":
-			val = 900
-		case "1h":
-			val = 3600
-		}
-		resolution = &val
 	}
+	val := SamplesResolutionSeconds
+	switch *res {
+	case "raw":
+		val = -1
+	case "1m":
+		val = 60
+	case "5m":
+		val = 300
+	case "15m":
+		val = 900
+	case "1h":
+		val = 3600
+	}
+	resolution = &val
 	if *resolution > 3600 {
 		logger.Errorf("Resolution %d is invalid", *resolution)
 		return nil, errors.New("resolution must be between -1 and 3600")
@@ -213,6 +219,9 @@ func configureDataExtractionTimeWindow(logger *logrus.Entry, paramReader *parame
 	var err error
 	if stack != "" {
 		schedule, err = paramReader.ReadConfigByStack(SchedulingStack, stack)
+		if err != nil {
+			logger.Error("Error reading parameter "+paramReader.ResolveParameter(SchedulingStack, stack), err)
+		}
 	} else {
 		schedule, err = paramReader.ReadConfig(Scheduling)
 	}
