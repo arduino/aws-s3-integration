@@ -84,9 +84,7 @@ Resources:
                   - ssm:GetParameter
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
-                Resource:
-                  - arn:aws:ssm:*:*:parameter/arduino/s3-importer/*
-                  - arn:aws:ssm:*:*:parameter/arduino/s3-importer/*
+                Resource: arn:aws:ssm:*:*:parameter/arduino/s3-*
               - Effect: Allow
                 Action:
                   - s3:PutObject
