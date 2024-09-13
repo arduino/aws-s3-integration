@@ -2,7 +2,9 @@
 
 This project provides a way to extract time series samples from Arduino cloud, publishing to a S3 destination bucket.
 Data are extracted at the given resolution via a scheduled Lambda function. Then samples are stored in CSV files and saved to S3.
-By default, data extraction is performed every hour, extracting samples aggregated at 5min resolution. Non numeric values like strings are sampled at the given resolution.
+By default, data extraction is performed every hour (configurable), extracting samples aggregated at 5min resolution (configurable).
+Aggregation is performed as average over aggregation period.
+Non numeric values like strings are sampled at the given resolution.
 
 ## Architecture
 

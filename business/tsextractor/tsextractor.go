@@ -128,7 +128,7 @@ func (a *TsExtractor) ExportTSToS3(
 	writer.Close()
 	defer writer.Delete()
 
-	destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15"))
+	destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
 	a.logger.Infof("Uploading file %s to bucket %s\n", destinationKey, s3cl.DestinationBucket())
 	if err := s3cl.WriteFile(ctx, destinationKey, writer.GetFilePath()); err != nil {
 		return err
