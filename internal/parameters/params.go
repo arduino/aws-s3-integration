@@ -50,8 +50,12 @@ func New() (*ParametersClient, error) {
 	}, nil
 }
 
+func (c *ParametersClient) ResolveParameter(param, stack string) string {
+	return strings.ReplaceAll(param, StackName, stack)
+}
+
 func (c *ParametersClient) ReadConfigByStack(param, stack string) (*string, error) {
-	param = strings.ReplaceAll(param, StackName, stack)
+	param = c.ResolveParameter(param, stack)
 	return c.ReadConfig(param)
 }
 
@@ -72,7 +76,7 @@ func (c *ParametersClient) ReadConfig(param string) (*string, error) {
 }
 
 func (c *ParametersClient) ReadIntConfigByStack(param, stack string) (*int, error) {
-	param = strings.ReplaceAll(param, StackName, stack)
+	param = c.ResolveParameter(param, stack)
 	return c.ReadIntConfig(param)
 }
 

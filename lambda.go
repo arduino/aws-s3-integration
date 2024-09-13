@@ -79,15 +79,15 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		logger.Infoln("------ Configured stack: " + stackName)
 		apikey, err = paramReader.ReadConfigByStack(IoTApiKeyStack, stackName)
 		if err != nil {
-			logger.Error("Error reading parameter "+IoTApiKeyStack, err)
+			logger.Error("Error reading parameter "+paramReader.ResolveParameter(IoTApiKeyStack, stackName), err)
 		}
 		apiSecret, err = paramReader.ReadConfigByStack(IoTApiSecretStack, stackName)
 		if err != nil {
-			logger.Error("Error reading parameter "+IoTApiSecretStack, err)
+			logger.Error("Error reading parameter "+paramReader.ResolveParameter(IoTApiSecretStack, stackName), err)
 		}
 		destinationS3Bucket, err = paramReader.ReadConfigByStack(DestinationS3BucketStack, stackName)
 		if err != nil || destinationS3Bucket == nil || *destinationS3Bucket == "" {
-			logger.Error("Error reading parameter "+DestinationS3BucketStack, err)
+			logger.Error("Error reading parameter "+paramReader.ResolveParameter(DestinationS3BucketStack, stackName), err)
 		}
 		orgId, _ = paramReader.ReadConfigByStack(IoTApiOrgIdStack, stackName)
 		tagsParam, _ := paramReader.ReadConfigByStack(IoTApiTagsStack, stackName)
