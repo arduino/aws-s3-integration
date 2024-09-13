@@ -80,7 +80,7 @@ func (a *TsExtractor) ExportTSToS3(
 	var wg sync.WaitGroup
 	tokens := make(chan struct{}, importConcurrency)
 
-	a.logger.Infoln("=====> Exporting data - time window: ", timeWindowInMinutes, " minutes. Resolution: ", resolution, " seconds")
+	a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to)
 	for thingID, thing := range thingsMap {
 
 		if thing.Properties == nil || len(thing.Properties) == 0 {

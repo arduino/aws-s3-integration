@@ -24,9 +24,9 @@ timestamp,thing_id,thing_name,property_id,property_name,property_type,value
 
 Files are organized by date and files of the same day are grouped.
 ```
-<bucket>:2024-09-04/2024-09-04-10.csv
-<bucket>:2024-09-04/2024-09-04-11.csv
-<bucket>:2024-09-04/2024-09-04-12.csv
+<bucket>:2024-09-04/2024-09-04-10-00.csv
+<bucket>:2024-09-04/2024-09-04-11-00.csv
+<bucket>:2024-09-04/2024-09-04-12-00.csv
 ```
 
 ## Deployment via Cloud Formation Template
