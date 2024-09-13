@@ -128,15 +128,7 @@ func (a *TsExtractor) ExportTSToS3(
 	writer.Close()
 	defer writer.Delete()
 
-	var formattedFrom string
-	if resolution == 3600 {
-		formattedFrom = from.Format("2006-01-02-15-00")
-	} else if resolution > 3600 {
-		formattedFrom = from.Format("2006-01-02-00-00")
-	} else {
-		formattedFrom = from.Format("2006-01-02-15-04")
-	}
-	destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), formattedFrom)
+	destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
 	a.logger.Infof("Uploading file %s to bucket %s\n", destinationKey, s3cl.DestinationBucket())
 	if err := s3cl.WriteFile(ctx, destinationKey, writer.GetFilePath()); err != nil {
 		return err
