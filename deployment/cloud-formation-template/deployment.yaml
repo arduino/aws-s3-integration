@@ -2,11 +2,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Arduino S3 data exporter. For deployment and architectural details, see https://github.com/arduino/aws-s3-integration
 
 Parameters:
-  LambdaFunctionName:
-    Type: String
-    Default: 'arduino-s3-csv-data-exporter'
-    Description: Name of the Lambda function.
-
   LambdaCodeS3Bucket:
     Type: String
     Description: S3 bucket where the Lambda function ZIP file is stored.
@@ -103,8 +98,7 @@ Resources:
   LambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName:
-        Ref: LambdaFunctionName
+      FunctionName: !Sub arduino-s3-csv-data-exporter-${AWS::StackName}
       Handler: bootstrap
       Role: !GetAtt ArduinoS3LambdaExecutionRole.Arn
       Code:
@@ -115,12 +109,15 @@ Resources:
       Runtime: provided.al2
       Timeout: 900
       MemorySize: 256
+      Environment:
+        Variables:
+          STACK_NAME: !Sub ${AWS::StackName}
 
   # Parameters in Parameter Store
   ApiKeyParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /arduino/s3-importer/iot/api-key
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/iot/api-key
       Type: String
       Value:
         Ref: IotApiKey
@@ -129,7 +126,7 @@ Resources:
   ApiSecretParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /arduino/s3-importer/iot/api-secret
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/iot/api-secret
       Type: String
       Value:
         Ref: IotApiSecret
@@ -138,7 +135,7 @@ Resources:
   OrgIdParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /arduino/s3-importer/iot/org-id
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/iot/org-id
       Type: String
       Value:
         Ref: IotOrgId
@@ -147,7 +144,7 @@ Resources:
   FilterTagsParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /arduino/s3-importer/iot/filter/tags
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/iot/filter/tags
       Type: String
       Value:
         Ref: TagFilter
@@ -156,7 +153,7 @@ Resources:
   ResolutionParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /arduino/s3-importer/iot/samples-resolution
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/iot/samples-resolution
       Type: String
       Value:
         Ref: Resolution
@@ -165,7 +162,7 @@ Resources:
   DestinationS3BucketParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /arduino/s3-importer/destination-bucket
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/destination-bucket
       Type: String
       Value:
         Ref: DestinationS3Bucket
@@ -174,7 +171,7 @@ Resources:
   ExecutionSchedulingParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /arduino/s3-importer/iot/scheduling
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/iot/scheduling
       Type: String
       Value:
         Ref: ExecutionScheduling
@@ -196,8 +193,7 @@ Resources:
   LambdaPermissionForEventBridge:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName:
-        Ref: LambdaFunctionName
+      FunctionName: !Sub arduino-s3-csv-data-exporter-${AWS::StackName}
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt EventBridgeRule.Arn

@@ -69,13 +69,13 @@ These parameters are filled by CFT at stack creation time and can be adjusted la
 
 | Parameter | Description |
 | --------- | ----------- |
-| /arduino/s3-importer/iot/api-key  | IoT API key |
-| /arduino/s3-importer/iot/api-secret | IoT API secret |
-| /arduino/s3-importer/iot/org-id    | (optional) organization id |
-| /arduino/s3-importer/iot/filter/tags    | (optional) tags filtering. Syntax: tag=value,tag2=value2  |
-| /arduino/s3-importer/iot/samples-resolution  | (optional) samples aggregation resolution (1/5/15 minutes, 1 hour, raw) |
-| /arduino/s3-importer/destination-bucket  | S3 destination bucket |
-| /arduino/s3-importer/iot/scheduling | Execution scheduling |
+| /arduino/s3-exporter/<stack-name>/iot/api-key  | IoT API key |
+| /arduino/s3-exporter/<stack-name>/iot/api-secret | IoT API secret |
+| /arduino/s3-exporter/<stack-name>/iot/org-id    | (optional) organization id |
+| /arduino/s3-exporter/<stack-name>/iot/filter/tags    | (optional) tags filtering. Syntax: tag=value,tag2=value2  |
+| /arduino/s3-exporter/<stack-name>/iot/samples-resolution  | (optional) samples aggregation resolution (1/5/15 minutes, 1 hour, raw) |
+| /arduino/s3-exporter/<stack-name>/destination-bucket  | S3 destination bucket |
+| /arduino/s3-exporter/<stack-name>/iot/scheduling | Execution scheduling |
 
 ### Tag filtering
 
@@ -88,7 +88,7 @@ You can use tag filtering if you need to reduce export to a specific set of Thin
 
 ![tag 1](docs/tag-1.png)
 
-* Configure tag filter during CFT creation of by editing '/arduino/s3-importer/iot/filter/tags' parameter (syntax: tag1=value1,tag2=value2).
+* Configure tag filter during CFT creation of by editing '/arduino/s3-exporter/<stack-name>/iot/filter/tags' parameter (syntax: tag1=value1,tag2=value2).
 
 ![tag filter](docs/tag-filter.png)
 

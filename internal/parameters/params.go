@@ -18,11 +18,14 @@ package parameters
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 )
+
+const StackName = "<stack-name>"
 
 type ParametersClient struct {
 	ssmcl *ssm.Client
@@ -47,6 +50,11 @@ func New() (*ParametersClient, error) {
 	}, nil
 }
 
+func (c *ParametersClient) ReadConfigByStack(param, stack string) (*string, error) {
+	param = strings.ReplaceAll(param, StackName, stack)
+	return c.ReadConfig(param)
+}
+
 func (c *ParametersClient) ReadConfig(param string) (*string, error) {
 	value, err := c.ssmcl.GetParameter(context.Background(), &ssm.GetParameterInput{
 		Name:           aws.String(param),
@@ -61,6 +69,11 @@ func (c *ParametersClient) ReadConfig(param string) (*string, error) {
 		return &defaultValue, nil
 	}
 	return paramValue, nil
+}
+
+func (c *ParametersClient) ReadIntConfigByStack(param, stack string) (*int, error) {
+	param = strings.ReplaceAll(param, StackName, stack)
+	return c.ReadIntConfig(param)
 }
 
 func (c *ParametersClient) ReadIntConfig(param string) (*int, error) {
