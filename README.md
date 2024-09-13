@@ -94,10 +94,15 @@ You can use tag filtering if you need to reduce export to a specific set of Thin
 
 ### Building code
 
-Code requires go v 1.22.
+Core is built by dedicated git workflow. Release can be trigged via applying a new tag.
+It's also possible to compile code locally. Code compile requires go v 1.22.
 To compile code:
 
 ```console
 foo@bar:~$ ./compile-lambda.sh
 arduino-s3-integration-lambda.zip archive created
+
+OR
+
+foo@bar:~$ task go:build
 ```
