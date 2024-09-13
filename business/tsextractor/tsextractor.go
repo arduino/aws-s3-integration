@@ -348,7 +348,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 		}
 
 		propertyID := strings.Replace(response.Query, "property.", "", 1)
-		a.logger.Infof("Thing %s - Query %s Property %s - %d values\n", thingID, response.Query, propertyID, response.CountValues)
+		a.logger.Debugf("Thing %s - Query %s Property %s - %d values\n", thingID, response.Query, propertyID, response.CountValues)
 		sampleCount += response.CountValues
 
 		propertyName, propertyType := extractPropertyNameAndType(thing, propertyID)
