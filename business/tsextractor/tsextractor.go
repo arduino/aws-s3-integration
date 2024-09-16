@@ -239,7 +239,7 @@ func extractPropertyNameAndType(thing iotclient.ArduinoThing, propertyID string)
 }
 
 func isStringProperty(ptype string) bool {
-	return ptype == "CHARSTRING"
+	return ptype == "CHARSTRING" || ptype == "LOCATION"
 }
 
 func (a *TsExtractor) populateStringTSDataIntoS3(
