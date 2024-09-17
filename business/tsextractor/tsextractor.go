@@ -50,6 +50,10 @@ func computeTimeAlignment(resolutionSeconds, timeWindowInMinutes int) (time.Time
 		resolutionSeconds = 300 // Align to 5 minutes
 	}
 	to := time.Now().Truncate(time.Duration(resolutionSeconds) * time.Second).UTC()
+	if resolutionSeconds <= 900 {
+		// Shift time window to avoid missing data
+		to = to.Add(-time.Duration(300) * time.Second)
+	}
 	from := to.Add(-time.Duration(timeWindowInMinutes) * time.Minute)
 	return from, to
 }
