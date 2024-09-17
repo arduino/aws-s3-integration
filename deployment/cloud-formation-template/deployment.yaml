@@ -46,6 +46,17 @@ Parameters:
         - 1 hour
       Default: 5 minutes
 
+  AggregationStatistic:
+      Type: String
+      Description: "Aggregation statistic for data extraction. It is not applicable for 'raw' resolution"
+      AllowedValues:
+        - AVG
+        - MIN
+        - MAX
+        - PCT_90
+        - PCT_90
+      Default: AVG
+
   TagFilter:
     Type: String
     Default: '<empty>'
@@ -175,6 +186,15 @@ Resources:
       Type: String
       Value:
         Ref: ExecutionScheduling
+      Tier: Standard
+
+  AggregationStatisticParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/iot/aggregation-statistic
+      Type: String
+      Value:
+        Ref: AggregationStatistic
       Tier: Standard
 
   # EventBridge Rule to trigger Lambda every hour

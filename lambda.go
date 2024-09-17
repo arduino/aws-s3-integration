@@ -52,6 +52,7 @@ const (
 	SamplesResoStack         = PerStackArduinoPrefix + "/iot/samples-resolution"
 	SchedulingStack          = PerStackArduinoPrefix + "/iot/scheduling"
 	DestinationS3BucketStack = PerStackArduinoPrefix + "/destination-bucket"
+	AggregationStatStack     = PerStackArduinoPrefix + "/iot/aggregation-statistic"
 
 	SamplesResolutionSeconds           = 300
 	DefaultTimeExtractionWindowMinutes = 60
@@ -68,6 +69,7 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	var tags *string
 	var orgId *string
 	var err error
+	var aggregationStat *string
 
 	logger.Infoln("------ Reading parameters from SSM")
 	paramReader, err := parameters.New()
@@ -94,6 +96,7 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		if tagsParam != nil {
 			tags = tagsParam
 		}
+		aggregationStat, _ = paramReader.ReadConfigByStack(AggregationStatStack, stackName)
 	} else {
 		apikey, err = paramReader.ReadConfig(IoTApiKey)
 		if err != nil {
@@ -120,6 +123,10 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	}
 	if apikey == nil || apiSecret == nil {
 		return nil, errors.New("key and secret are required")
+	}
+	if aggregationStat == nil {
+		avgAggregation := "AVG"
+		aggregationStat = &avgAggregation
 	}
 
 	// Resolve resolution
@@ -160,9 +167,10 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	} else {
 		logger.Infoln("resolution:", *resolution, "seconds")
 	}
+	logger.Infoln("aggregation statistic:", *aggregationStat)
 	logger.Infoln("data extraction time windows:", extractionWindowMinutes, "minutes")
 
-	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket)
+	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat)
 	if err != nil {
 		return nil, err
 	}

@@ -55,12 +55,17 @@ func computeTimeAlignment(resolutionSeconds, timeWindowInMinutes int) (time.Time
 	return from, to
 }
 
+func isRawResolution(resolution int) bool {
+	return resolution <= 0
+}
+
 func (a *TsExtractor) ExportTSToS3(
 	ctx context.Context,
 	timeWindowInMinutes int,
 	thingsMap map[string]iotclient.ArduinoThing,
 	resolution int,
-	destinationS3Bucket string) error {
+	destinationS3Bucket string,
+	aggregationStat string) error {
 
 	// Truncate time to given resolution
 	from, to := computeTimeAlignment(resolution, timeWindowInMinutes)
@@ -80,7 +85,11 @@ func (a *TsExtractor) ExportTSToS3(
 	var wg sync.WaitGroup
 	tokens := make(chan struct{}, importConcurrency)
 
-	a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to)
+	if isRawResolution(resolution) {
+		a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to, " - aggregation: raw")
+	} else {
+		a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to, " - aggregation: ", aggregationStat)
+	}
 	for thingID, thing := range thingsMap {
 
 		if thing.Properties == nil || len(thing.Properties) == 0 {
@@ -95,7 +104,7 @@ func (a *TsExtractor) ExportTSToS3(
 			defer func() { <-tokens }()
 			defer wg.Done()
 
-			if resolution <= 0 {
+			if isRawResolution(resolution) {
 				// Populate raw time series data
 				err := a.populateRawTSDataIntoS3(ctx, from, to, thingID, thing, writer)
 				if err != nil {
@@ -104,7 +113,7 @@ func (a *TsExtractor) ExportTSToS3(
 				}
 			} else {
 				// Populate numeric time series data
-				err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
+				err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, aggregationStat, writer)
 				if err != nil {
 					a.logger.Error("Error populating time series data: ", err)
 					return
@@ -155,6 +164,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	thingID string,
 	thing iotclient.ArduinoThing,
 	resolution int,
+	aggregationStat string,
 	writer *csv.CsvWriter) error {
 
 	if resolution <= 60 {
@@ -165,7 +175,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	var err error
 	var retry bool
 	for i := 0; i < retryCount; i++ {
-		batched, retry, err = a.iotcl.GetTimeSeriesByThing(ctx, thingID, from, to, int64(resolution))
+		batched, retry, err = a.iotcl.GetTimeSeriesByThing(ctx, thingID, from, to, int64(resolution), aggregationStat)
 		if !retry {
 			break
 		} else {

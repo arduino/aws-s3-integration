@@ -25,7 +25,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid string, tagsF *string, resolution, timeWindowMinutes int, destinationS3Bucket string) error {
+func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid string, tagsF *string, resolution, timeWindowMinutes int, destinationS3Bucket string, aggregationStat string) error {
 
 	// Init client
 	iotcl, err := iot.NewClient(key, secret, orgid)
@@ -50,7 +50,7 @@ func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid s
 
 	// Extract data points from thing and push to S3
 	tsextractorClient := tsextractor.New(iotcl, logger)
-	if err := tsextractorClient.ExportTSToS3(ctx, timeWindowMinutes, thingsMap, resolution, destinationS3Bucket); err != nil {
+	if err := tsextractorClient.ExportTSToS3(ctx, timeWindowMinutes, thingsMap, resolution, destinationS3Bucket, aggregationStat); err != nil {
 		logger.Error("Error aligning time series samples: ", err)
 	}
 

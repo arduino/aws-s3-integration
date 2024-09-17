@@ -235,7 +235,7 @@ func (cl *Client) ThingTagsDelete(ctx context.Context, id string, keys []string)
 	return nil
 }
 
-func (cl *Client) GetTimeSeriesByThing(ctx context.Context, thingID string, from, to time.Time, interval int64) (*iotclient.ArduinoSeriesBatch, bool, error) {
+func (cl *Client) GetTimeSeriesByThing(ctx context.Context, thingID string, from, to time.Time, interval int64, aggregationStat string) (*iotclient.ArduinoSeriesBatch, bool, error) {
 	if thingID == "" {
 		return nil, false, fmt.Errorf("no thing provided")
 	}
@@ -247,10 +247,11 @@ func (cl *Client) GetTimeSeriesByThing(ctx context.Context, thingID string, from
 
 	requests := []iotclient.BatchQueryRequestMediaV1{
 		{
-			From:     from,
-			Interval: &interval,
-			Q:        fmt.Sprintf("thing.%s", thingID),
-			To:       to,
+			From:        from,
+			Interval:    &interval,
+			Q:           fmt.Sprintf("thing.%s", thingID),
+			To:          to,
+			Aggregation: &aggregationStat,
 		},
 	}
 

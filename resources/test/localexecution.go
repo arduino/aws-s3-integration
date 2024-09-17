@@ -89,7 +89,7 @@ func HandleRequest(ctx context.Context, dev bool) (*string, error) {
 		logger.Infoln("tags:", *tags)
 	}
 
-	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket)
+	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket, "MAX")
 	if err != nil {
 		return nil, err
 	}
