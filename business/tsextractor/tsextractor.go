@@ -17,6 +17,7 @@ package tsextractor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -28,7 +29,6 @@ import (
 
 	"github.com/arduino/aws-s3-integration/internal/csv"
 	"github.com/arduino/aws-s3-integration/internal/iot"
-	"github.com/arduino/aws-s3-integration/internal/s3"
 	iotclient "github.com/arduino/iot-client-go/v2"
 	"github.com/sirupsen/logrus"
 )
@@ -37,11 +37,11 @@ const importConcurrency = 10
 const retryCount = 5
 
 type TsExtractor struct {
-	iotcl  *iot.Client
+	iotcl  iot.API
 	logger *logrus.Entry
 }
 
-func New(iotcl *iot.Client, logger *logrus.Entry) *TsExtractor {
+func New(iotcl iot.API, logger *logrus.Entry) *TsExtractor {
 	return &TsExtractor{iotcl: iotcl, logger: logger}
 }
 
@@ -51,36 +51,42 @@ func computeTimeAlignment(resolutionSeconds, timeWindowInMinutes int) (time.Time
 		resolutionSeconds = 300 // Align to 5 minutes
 	}
 	to := time.Now().Truncate(time.Duration(resolutionSeconds) * time.Second).UTC()
+	if resolutionSeconds <= 900 {
+		// Shift time window to avoid missing data
+		to = to.Add(-time.Duration(300) * time.Second)
+	}
 	from := to.Add(-time.Duration(timeWindowInMinutes) * time.Minute)
 	return from, to
 }
 
-func (a *TsExtractor) ExportTSToS3(
+func isRawResolution(resolution int) bool {
+	return resolution <= 0
+}
+
+func (a *TsExtractor) ExportTSToFile(
 	ctx context.Context,
 	timeWindowInMinutes int,
 	thingsMap map[string]iotclient.ArduinoThing,
 	resolution int,
-	destinationS3Bucket string) error {
+	aggregationStat string) (*csv.CsvWriter, time.Time, error) {
 
 	// Truncate time to given resolution
 	from, to := computeTimeAlignment(resolution, timeWindowInMinutes)
 
-	// Open s3 output writer
-	s3cl, err := s3.NewS3Client(destinationS3Bucket)
-	if err != nil {
-		return err
-	}
-
 	// Open csv output writer
-	writer, err := csv.NewWriter(from, a.logger)
+	writer, err := csv.NewWriter(from, a.logger, isRawResolution(resolution))
 	if err != nil {
-		return err
+		return nil, from, err
 	}
 
 	var wg sync.WaitGroup
 	tokens := make(chan struct{}, importConcurrency)
 
-	a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to)
+	if isRawResolution(resolution) {
+		a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to, " - aggregation: raw")
+	} else {
+		a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to, " - aggregation: ", aggregationStat)
+	}
 	for thingID, thing := range thingsMap {
 
 		if thing.Properties == nil || len(thing.Properties) == 0 {
@@ -95,7 +101,7 @@ func (a *TsExtractor) ExportTSToS3(
 			defer func() { <-tokens }()
 			defer wg.Done()
 
-			if resolution <= 0 {
+			if isRawResolution(resolution) {
 				// Populate raw time series data
 				err := a.populateRawTSDataIntoS3(ctx, from, to, thingID, thing, writer)
 				if err != nil {
@@ -104,7 +110,7 @@ func (a *TsExtractor) ExportTSToS3(
 				}
 			} else {
 				// Populate numeric time series data
-				err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
+				err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, aggregationStat, writer)
 				if err != nil {
 					a.logger.Error("Error populating time series data: ", err)
 					return
@@ -124,17 +130,7 @@ func (a *TsExtractor) ExportTSToS3(
 	a.logger.Infoln("Waiting for all data extraction jobs to terminate...")
 	wg.Wait()
 
-	// Close csv output writer and upload to s3
-	writer.Close()
-	defer writer.Delete()
-
-	destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
-	a.logger.Infof("Uploading file %s to bucket %s\n", destinationKey, s3cl.DestinationBucket())
-	if err := s3cl.WriteFile(ctx, destinationKey, writer.GetFilePath()); err != nil {
-		return err
-	}
-
-	return nil
+	return writer, from, nil
 }
 
 func randomRateLimitingSleep() {
@@ -155,6 +151,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	thingID string,
 	thing iotclient.ArduinoThing,
 	resolution int,
+	aggregationStat string,
 	writer *csv.CsvWriter) error {
 
 	if resolution <= 60 {
@@ -165,7 +162,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	var err error
 	var retry bool
 	for i := 0; i < retryCount; i++ {
-		batched, retry, err = a.iotcl.GetTimeSeriesByThing(ctx, thingID, from, to, int64(resolution))
+		batched, retry, err = a.iotcl.GetTimeSeriesByThing(ctx, thingID, from, to, int64(resolution), aggregationStat)
 		if !retry {
 			break
 		} else {
@@ -195,7 +192,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 
 			ts := response.Times[i]
 			value := response.Values[i]
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, strconv.FormatFloat(value, 'f', -1, 64)))
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, strconv.FormatFloat(value, 'f', -1, 64), aggregationStat))
 		}
 	}
 
@@ -210,7 +207,20 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	return nil
 }
 
-func composeRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, propertyType string, value string) []string {
+func composeRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, propertyType string, value string, aggregation string) []string {
+	row := make([]string, 8)
+	row[0] = ts.UTC().Format(time.RFC3339)
+	row[1] = thingID
+	row[2] = thingName
+	row[3] = propertyID
+	row[4] = propertyName
+	row[5] = propertyType
+	row[6] = value
+	row[7] = aggregation
+	return row
+}
+
+func composeRawRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, propertyType string, value string) []string {
 	row := make([]string, 7)
 	row[0] = ts.UTC().Format(time.RFC3339)
 	row[1] = thingID
@@ -300,7 +310,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value)))
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value), ""))
 		}
 	}
 
@@ -360,7 +370,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value)))
+			samples = append(samples, composeRawRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value)))
 		}
 	}
 
@@ -375,7 +385,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 	return nil
 }
 
-func interfaceToString(value interface{}) string {
+func (a *TsExtractor) interfaceToString(value interface{}) string {
 	switch v := value.(type) {
 	case string:
 		return v
@@ -385,6 +395,13 @@ func interfaceToString(value interface{}) string {
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	case bool:
 		return strconv.FormatBool(v)
+	case map[string]any:
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			a.logger.Error("Error encoding map to json: ", err)
+			return fmt.Sprintf("%v", v)
+		}
+		return string(encoded)
 	default:
 		return fmt.Sprintf("%v", v)
 	}

@@ -20,7 +20,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/arduino/aws-s3-integration/app/importer"
+	"github.com/arduino/aws-s3-integration/app/exporter"
 	"github.com/arduino/aws-s3-integration/internal/parameters"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/sirupsen/logrus"
@@ -52,6 +52,7 @@ const (
 	SamplesResoStack         = PerStackArduinoPrefix + "/iot/samples-resolution"
 	SchedulingStack          = PerStackArduinoPrefix + "/iot/scheduling"
 	DestinationS3BucketStack = PerStackArduinoPrefix + "/destination-bucket"
+	AggregationStatStack     = PerStackArduinoPrefix + "/iot/aggregation-statistic"
 
 	SamplesResolutionSeconds           = 300
 	DefaultTimeExtractionWindowMinutes = 60
@@ -61,6 +62,7 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 
 	logger := logrus.NewEntry(logrus.New())
 	stackName := os.Getenv("STACK_NAME")
+	compressFile := os.Getenv("ENABLE_COMPRESSION")
 
 	var apikey *string
 	var apiSecret *string
@@ -68,6 +70,7 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	var tags *string
 	var orgId *string
 	var err error
+	var aggregationStat *string
 
 	logger.Infoln("------ Reading parameters from SSM")
 	paramReader, err := parameters.New()
@@ -94,6 +97,7 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		if tagsParam != nil {
 			tags = tagsParam
 		}
+		aggregationStat, _ = paramReader.ReadConfigByStack(AggregationStatStack, stackName)
 	} else {
 		apikey, err = paramReader.ReadConfig(IoTApiKey)
 		if err != nil {
@@ -121,6 +125,10 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	if apikey == nil || apiSecret == nil {
 		return nil, errors.New("key and secret are required")
 	}
+	if aggregationStat == nil {
+		avgAggregation := "AVG"
+		aggregationStat = &avgAggregation
+	}
 
 	// Resolve resolution
 	resolution, err := configureExtractionResolution(logger, paramReader, stackName)
@@ -138,6 +146,11 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		logger.Warn("Resolution must be greater than 60 seconds for time windows greater than 60 minutes. Setting resolution to 5 minutes.")
 		defReso := SamplesResolutionSeconds
 		resolution = &defReso
+	}
+
+	enabledCompression := false
+	if compressFile == "true" {
+		enabledCompression = true
 	}
 
 	logger.Infoln("------ Running import")
@@ -160,9 +173,11 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	} else {
 		logger.Infoln("resolution:", *resolution, "seconds")
 	}
+	logger.Infoln("aggregation statistic:", *aggregationStat)
 	logger.Infoln("data extraction time windows:", extractionWindowMinutes, "minutes")
+	logger.Infoln("file compression enabled:", enabledCompression)
 
-	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket)
+	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression)
 	if err != nil {
 		return nil, err
 	}
@@ -193,17 +208,18 @@ func configureExtractionResolution(logger *logrus.Entry, paramReader *parameters
 			return resolution, nil
 		}
 	}
+
 	val := SamplesResolutionSeconds
 	switch *res {
 	case "raw":
 		val = -1
-	case "1m":
+	case "1 minute":
 		val = 60
-	case "5m":
+	case "5 minutes":
 		val = 300
-	case "15m":
+	case "15 minutes":
 		val = 900
-	case "1h":
+	case "1 hour":
 		val = 3600
 	}
 	resolution = &val

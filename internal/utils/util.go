@@ -15,7 +15,13 @@
 
 package utils
 
-import "strings"
+import (
+	"compress/gzip"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
 
 func StringPointer(val string) *string {
 	return &val
@@ -39,4 +45,33 @@ func ParseTags(tags *string) map[string]string {
 		}
 	}
 	return tagsMap
+}
+
+func GzipFileCompression(origFilePath string) (string, error) {
+	// Open the source file
+	src, err := os.Open(origFilePath)
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+
+	// Create the destination file with .gz extension
+	destFilePath := fmt.Sprintf("%s.gz", origFilePath)
+	dest, err := os.Create(destFilePath)
+	if err != nil {
+		return "", err
+	}
+	defer dest.Close()
+
+	// Create a new gzip writer
+	gzipWriter := gzip.NewWriter(dest)
+	defer gzipWriter.Close()
+
+	// Copy the contents of the source file to the gzip writer
+	_, err = io.Copy(gzipWriter, src)
+	if err != nil {
+		return "", err
+	}
+
+	return destFilePath, nil
 }

@@ -15,16 +15,22 @@ const (
 	baseTmpStorage = "/tmp"
 )
 
-var csvHeader = []string{"timestamp", "thing_id", "thing_name", "property_id", "property_name", "property_type", "value"}
+var csvHeader = []string{"timestamp", "thing_id", "thing_name", "property_id", "property_name", "property_type", "value", "aggregation_statistic"}
+var csvHeaderRaw = []string{"timestamp", "thing_id", "thing_name", "property_id", "property_name", "property_type", "value"}
 
-func NewWriter(destinationHour time.Time, logger *logrus.Entry) (*CsvWriter, error) {
+func NewWriter(destinationHour time.Time, logger *logrus.Entry, isRawData bool) (*CsvWriter, error) {
 	filePath := fmt.Sprintf("%s/%s.csv", baseTmpStorage, destinationHour.Format("2006-01-02-15-04"))
 	file, err := os.Create(filePath)
 	if err != nil {
 		logger.Fatalf("failed creating file: %s", err)
 	}
 	writer := csv.NewWriter(file)
-	if err := writer.Write(csvHeader); err != nil {
+
+	header := csvHeader
+	if isRawData {
+		header = csvHeaderRaw
+	}
+	if err := writer.Write(header); err != nil {
 		logger.Fatalf("failed writing record to file: %s", err)
 	}
 	return &CsvWriter{
@@ -32,6 +38,7 @@ func NewWriter(destinationHour time.Time, logger *logrus.Entry) (*CsvWriter, err
 		logger:    logger,
 		csvWriter: writer,
 		filePath:  filePath,
+		isRawData: isRawData,
 	}, nil
 }
 
@@ -41,6 +48,7 @@ type CsvWriter struct {
 	logger        *logrus.Entry
 	csvWriter     *csv.Writer
 	filePath      string
+	isRawData     bool
 }
 
 func (c *CsvWriter) Write(records [][]string) error {

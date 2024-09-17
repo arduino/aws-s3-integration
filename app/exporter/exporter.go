@@ -13,19 +13,22 @@
 // Arduino software without disclosing the source code of your own applications.
 // To purchase a commercial license, send an email to license@arduino.cc.
 
-package importer
+package exporter
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/arduino/aws-s3-integration/business/tsextractor"
 	"github.com/arduino/aws-s3-integration/internal/iot"
+	"github.com/arduino/aws-s3-integration/internal/s3"
 	"github.com/arduino/aws-s3-integration/internal/utils"
 	iotclient "github.com/arduino/iot-client-go/v2"
 	"github.com/sirupsen/logrus"
 )
 
-func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid string, tagsF *string, resolution, timeWindowMinutes int, destinationS3Bucket string) error {
+func StartExporter(ctx context.Context, logger *logrus.Entry, key, secret, orgid string, tagsF *string, resolution, timeWindowMinutes int, destinationS3Bucket string, aggregationStat string, compress bool) error {
 
 	// Init client
 	iotcl, err := iot.NewClient(key, secret, orgid)
@@ -50,8 +53,39 @@ func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid s
 
 	// Extract data points from thing and push to S3
 	tsextractorClient := tsextractor.New(iotcl, logger)
-	if err := tsextractorClient.ExportTSToS3(ctx, timeWindowMinutes, thingsMap, resolution, destinationS3Bucket); err != nil {
+
+	// Open s3 output writer
+	s3cl, err := s3.NewS3Client(destinationS3Bucket)
+	if err != nil {
+		return err
+	}
+
+	if writer, from, err := tsextractorClient.ExportTSToFile(ctx, timeWindowMinutes, thingsMap, resolution, aggregationStat); err != nil {
 		logger.Error("Error aligning time series samples: ", err)
+		return err
+	} else {
+		writer.Close()
+		defer writer.Delete()
+
+		fileToUpload := writer.GetFilePath()
+		destinationKeyFormat := "%s/%s.csv"
+		if compress {
+			logger.Infof("Compressing file: %s\n", fileToUpload)
+			compressedFile, err := utils.GzipFileCompression(fileToUpload)
+			if err != nil {
+				return err
+			}
+			fileToUpload = compressedFile
+			logger.Infof("Generated compressed file: %s\n", fileToUpload)
+			destinationKeyFormat = "%s/%s.csv.gz"
+			defer func(f string) { os.Remove(f) }(fileToUpload)
+		}
+
+		destinationKey := fmt.Sprintf(destinationKeyFormat, from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
+		logger.Infof("Uploading file %s to bucket %s/%s\n", fileToUpload, s3cl.DestinationBucket(), destinationKey)
+		if err := s3cl.WriteFile(ctx, destinationKey, fileToUpload); err != nil {
+			return err
+		}
 	}
 
 	return nil
