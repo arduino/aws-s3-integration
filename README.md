@@ -15,11 +15,11 @@ By default, all Arduino things present in the account are exported: it is possib
 
 CSV produced has the following structure:
 ```console
-timestamp,thing_id,thing_name,property_id,property_name,property_type,value
-2024-09-04T11:00:00Z,07846f3c-37ae-4722-a3f5-65d7b4449ad3,H7,137c02d0-b50f-47fb-a2eb-b6d23884ec51,m3,FLOAT,3
-2024-09-04T11:01:00Z,07846f3c-37ae-4722-a3f5-65d7b4449ad3,H7,137c02d0-b50f-47fb-a2eb-b6d23884ec51,m3,FLOAT,7
-2024-09-04T11:02:00Z,07846f3c-37ae-4722-a3f5-65d7b4449ad3,H7,137c02d0-b50f-47fb-a2eb-b6d23884ec51,m3,FLOAT,11
-2024-09-04T11:03:00Z,07846f3c-37ae-4722-a3f5-65d7b4449ad3,H7,137c02d0-b50f-47fb-a2eb-b6d23884ec51,m3,FLOAT,15
+timestamp,thing_id,thing_name,property_id,property_name,property_type,value,aggregation_statistic
+2024-09-04T11:00:00Z,07846f3c-37ae-4722-a3f5-65d7b4449ad3,H7,137c02d0-b50f-47fb-a2eb-b6d23884ec51,m3,FLOAT,3,AVG
+2024-09-04T11:01:00Z,07846f3c-37ae-4722-a3f5-65d7b4449ad3,H7,137c02d0-b50f-47fb-a2eb-b6d23884ec51,m3,FLOAT,7,AVG
+2024-09-04T11:02:00Z,07846f3c-37ae-4722-a3f5-65d7b4449ad3,H7,137c02d0-b50f-47fb-a2eb-b6d23884ec51,m3,FLOAT,11,AVG
+2024-09-04T11:03:00Z,07846f3c-37ae-4722-a3f5-65d7b4449ad3,H7,137c02d0-b50f-47fb-a2eb-b6d23884ec51,m3,FLOAT,15,AVG
 ```
 
 Files are organized by date and files of the same day are grouped.
@@ -76,6 +76,7 @@ These parameters are filled by CFT at stack creation time and can be adjusted la
 | /arduino/s3-exporter/{stack-name}/iot/samples-resolution  | (optional) samples aggregation resolution (1/5/15 minutes, 1 hour, raw) |
 | /arduino/s3-exporter/{stack-name}/destination-bucket  | S3 destination bucket |
 | /arduino/s3-exporter/{stack-name}/iot/scheduling | Execution scheduling |
+| /arduino/s3-exporter/{stack-name}/iot/aggregation-statistic | Aggregation statistic |
 
 ### Tag filtering
 

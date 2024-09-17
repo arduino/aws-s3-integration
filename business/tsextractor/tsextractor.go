@@ -77,7 +77,7 @@ func (a *TsExtractor) ExportTSToS3(
 	}
 
 	// Open csv output writer
-	writer, err := csv.NewWriter(from, a.logger)
+	writer, err := csv.NewWriter(from, a.logger, isRawResolution(resolution))
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 
 			ts := response.Times[i]
 			value := response.Values[i]
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, strconv.FormatFloat(value, 'f', -1, 64)))
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, strconv.FormatFloat(value, 'f', -1, 64), aggregationStat))
 		}
 	}
 
@@ -220,7 +220,20 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	return nil
 }
 
-func composeRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, propertyType string, value string) []string {
+func composeRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, propertyType string, value string, aggregation string) []string {
+	row := make([]string, 8)
+	row[0] = ts.UTC().Format(time.RFC3339)
+	row[1] = thingID
+	row[2] = thingName
+	row[3] = propertyID
+	row[4] = propertyName
+	row[5] = propertyType
+	row[6] = value
+	row[7] = aggregation
+	return row
+}
+
+func composeRawRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, propertyType string, value string) []string {
 	row := make([]string, 7)
 	row[0] = ts.UTC().Format(time.RFC3339)
 	row[1] = thingID
@@ -310,7 +323,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value)))
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value), ""))
 		}
 	}
 
@@ -370,7 +383,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value)))
+			samples = append(samples, composeRawRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value)))
 		}
 	}
 
