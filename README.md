@@ -47,7 +47,7 @@ Before stack creation, two S3 buckets have to be created:
 bucket must be in the same region where stack will be created.
 
 Follow these steps to deploy a new stack:
-* download [lambda code binaries](https://github.com/arduino/aws-s3-integration/releases) and [Cloud Formation Template](deployment/cloud-formation-template/deployment.yaml)
+* download [lambda code binaries .zip archive](https://github.com/arduino/aws-s3-integration/releases) and [Cloud Formation Template .yaml file](https://github.com/arduino/aws-s3-integration/releases)
 * upload CFT and binary zip file on an S3 bucket accessible by the AWS account. For the CFT yaml file, copy the Object URL (it will be required in next step).
   
 ![object URL](docs/objecturl.png)

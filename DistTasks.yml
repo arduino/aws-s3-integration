@@ -45,6 +45,7 @@ tasks:
         zip {{.PACKAGE_NAME}} bootstrap LICENSE
         rm bootstrap LICENSE
         sha256sum {{.PACKAGE_NAME}} >> {{.CHECKSUM_FILE}}
+        cp ../deployment/cloud-formation-template/deployment.yaml {{.PROJECT_NAME}}-cloud-formation-template.yaml
 
     vars:
       PLATFORM_DIR: "{{.PROJECT_NAME}}_linux_amd64"
