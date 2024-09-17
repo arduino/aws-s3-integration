@@ -201,17 +201,18 @@ func configureExtractionResolution(logger *logrus.Entry, paramReader *parameters
 			return resolution, nil
 		}
 	}
+
 	val := SamplesResolutionSeconds
 	switch *res {
 	case "raw":
 		val = -1
-	case "1m":
+	case "1 minute":
 		val = 60
-	case "5m":
+	case "5 minutes":
 		val = 300
-	case "15m":
+	case "15 minutes":
 		val = 900
-	case "1h":
+	case "1 hour":
 		val = 3600
 	}
 	resolution = &val
