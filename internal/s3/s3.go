@@ -12,6 +12,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+//go:generate mockery --name API --filename s3_api.go
+type API interface {
+	WriteFile(ctx context.Context, key, filePath string) error
+	DestinationBucket() string
+}
+
 type S3Client struct {
 	client     *awsS3.Client
 	bucketName string

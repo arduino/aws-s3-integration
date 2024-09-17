@@ -17,9 +17,11 @@ package importer
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/arduino/aws-s3-integration/business/tsextractor"
 	"github.com/arduino/aws-s3-integration/internal/iot"
+	"github.com/arduino/aws-s3-integration/internal/s3"
 	"github.com/arduino/aws-s3-integration/internal/utils"
 	iotclient "github.com/arduino/iot-client-go/v2"
 	"github.com/sirupsen/logrus"
@@ -50,8 +52,25 @@ func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid s
 
 	// Extract data points from thing and push to S3
 	tsextractorClient := tsextractor.New(iotcl, logger)
-	if err := tsextractorClient.ExportTSToS3(ctx, timeWindowMinutes, thingsMap, resolution, destinationS3Bucket, aggregationStat); err != nil {
+
+	// Open s3 output writer
+	s3cl, err := s3.NewS3Client(destinationS3Bucket)
+	if err != nil {
+		return err
+	}
+
+	if writer, from, err := tsextractorClient.ExportTSToFile(ctx, timeWindowMinutes, thingsMap, resolution, destinationS3Bucket, aggregationStat); err != nil {
 		logger.Error("Error aligning time series samples: ", err)
+		return err
+	} else {
+		writer.Close()
+		defer writer.Delete()
+
+		destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
+		logger.Infof("Uploading file %s to bucket %s\n", destinationKey, s3cl.DestinationBucket())
+		if err := s3cl.WriteFile(ctx, destinationKey, writer.GetFilePath()); err != nil {
+			return err
+		}
 	}
 
 	return nil

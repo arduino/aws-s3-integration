@@ -28,7 +28,6 @@ import (
 
 	"github.com/arduino/aws-s3-integration/internal/csv"
 	"github.com/arduino/aws-s3-integration/internal/iot"
-	"github.com/arduino/aws-s3-integration/internal/s3"
 	iotclient "github.com/arduino/iot-client-go/v2"
 	"github.com/sirupsen/logrus"
 )
@@ -37,11 +36,11 @@ const importConcurrency = 10
 const retryCount = 5
 
 type TsExtractor struct {
-	iotcl  *iot.Client
+	iotcl  iot.API
 	logger *logrus.Entry
 }
 
-func New(iotcl *iot.Client, logger *logrus.Entry) *TsExtractor {
+func New(iotcl iot.API, logger *logrus.Entry) *TsExtractor {
 	return &TsExtractor{iotcl: iotcl, logger: logger}
 }
 
@@ -59,27 +58,21 @@ func isRawResolution(resolution int) bool {
 	return resolution <= 0
 }
 
-func (a *TsExtractor) ExportTSToS3(
+func (a *TsExtractor) ExportTSToFile(
 	ctx context.Context,
 	timeWindowInMinutes int,
 	thingsMap map[string]iotclient.ArduinoThing,
 	resolution int,
 	destinationS3Bucket string,
-	aggregationStat string) error {
+	aggregationStat string) (*csv.CsvWriter, time.Time, error) {
 
 	// Truncate time to given resolution
 	from, to := computeTimeAlignment(resolution, timeWindowInMinutes)
 
-	// Open s3 output writer
-	s3cl, err := s3.NewS3Client(destinationS3Bucket)
-	if err != nil {
-		return err
-	}
-
 	// Open csv output writer
 	writer, err := csv.NewWriter(from, a.logger, isRawResolution(resolution))
 	if err != nil {
-		return err
+		return nil, from, err
 	}
 
 	var wg sync.WaitGroup
@@ -133,17 +126,7 @@ func (a *TsExtractor) ExportTSToS3(
 	a.logger.Infoln("Waiting for all data extraction jobs to terminate...")
 	wg.Wait()
 
-	// Close csv output writer and upload to s3
-	writer.Close()
-	defer writer.Delete()
-
-	destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
-	a.logger.Infof("Uploading file %s to bucket %s\n", destinationKey, s3cl.DestinationBucket())
-	if err := s3cl.WriteFile(ctx, destinationKey, writer.GetFilePath()); err != nil {
-		return err
-	}
-
-	return nil
+	return writer, from, nil
 }
 
 func randomRateLimitingSleep() {
