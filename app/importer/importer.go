@@ -59,7 +59,7 @@ func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid s
 		return err
 	}
 
-	if writer, from, err := tsextractorClient.ExportTSToFile(ctx, timeWindowMinutes, thingsMap, resolution, destinationS3Bucket, aggregationStat); err != nil {
+	if writer, from, err := tsextractorClient.ExportTSToFile(ctx, timeWindowMinutes, thingsMap, resolution, aggregationStat); err != nil {
 		logger.Error("Error aligning time series samples: ", err)
 		return err
 	} else {

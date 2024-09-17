@@ -63,7 +63,6 @@ func (a *TsExtractor) ExportTSToFile(
 	timeWindowInMinutes int,
 	thingsMap map[string]iotclient.ArduinoThing,
 	resolution int,
-	destinationS3Bucket string,
 	aggregationStat string) (*csv.CsvWriter, time.Time, error) {
 
 	// Truncate time to given resolution
