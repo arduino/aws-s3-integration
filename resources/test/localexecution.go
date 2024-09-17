@@ -5,7 +5,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/arduino/aws-s3-integration/app/importer"
+	"github.com/arduino/aws-s3-integration/app/exporter"
 	"github.com/arduino/aws-s3-integration/internal/parameters"
 	"github.com/sirupsen/logrus"
 )
@@ -89,7 +89,7 @@ func HandleRequest(ctx context.Context, dev bool) (*string, error) {
 		logger.Infoln("tags:", *tags)
 	}
 
-	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket, "MAX", true)
+	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket, "MAX", true)
 	if err != nil {
 		return nil, err
 	}

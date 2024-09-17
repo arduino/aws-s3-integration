@@ -17,6 +17,7 @@ package tsextractor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -309,7 +310,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value), ""))
+			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value), ""))
 		}
 	}
 
@@ -369,7 +370,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRawRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, interfaceToString(value)))
+			samples = append(samples, composeRawRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value)))
 		}
 	}
 
@@ -384,7 +385,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 	return nil
 }
 
-func interfaceToString(value interface{}) string {
+func (a *TsExtractor) interfaceToString(value interface{}) string {
 	switch v := value.(type) {
 	case string:
 		return v
@@ -394,6 +395,13 @@ func interfaceToString(value interface{}) string {
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	case bool:
 		return strconv.FormatBool(v)
+	case map[string]any:
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			a.logger.Error("Error encoding map to json: ", err)
+			return fmt.Sprintf("%v", v)
+		}
+		return string(encoded)
 	default:
 		return fmt.Sprintf("%v", v)
 	}

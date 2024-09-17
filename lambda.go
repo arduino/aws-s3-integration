@@ -20,7 +20,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/arduino/aws-s3-integration/app/importer"
+	"github.com/arduino/aws-s3-integration/app/exporter"
 	"github.com/arduino/aws-s3-integration/internal/parameters"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/sirupsen/logrus"
@@ -177,7 +177,7 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	logger.Infoln("data extraction time windows:", extractionWindowMinutes, "minutes")
 	logger.Infoln("file compression enabled:", enabledCompression)
 
-	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression)
+	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression)
 	if err != nil {
 		return nil, err
 	}
