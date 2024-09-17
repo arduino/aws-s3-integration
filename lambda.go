@@ -62,6 +62,7 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 
 	logger := logrus.NewEntry(logrus.New())
 	stackName := os.Getenv("STACK_NAME")
+	compressFile := os.Getenv("ENABLE_COMPRESSION")
 
 	var apikey *string
 	var apiSecret *string
@@ -147,6 +148,11 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		resolution = &defReso
 	}
 
+	enabledCompression := false
+	if compressFile == "true" {
+		enabledCompression = true
+	}
+
 	logger.Infoln("------ Running import")
 	if event.Dev || os.Getenv("DEV") == "true" {
 		logger.Infoln("Running in dev mode")
@@ -169,8 +175,9 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	}
 	logger.Infoln("aggregation statistic:", *aggregationStat)
 	logger.Infoln("data extraction time windows:", extractionWindowMinutes, "minutes")
+	logger.Infoln("file compression enabled:", enabledCompression)
 
-	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat)
+	err = importer.StartImport(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression)
 	if err != nil {
 		return nil, err
 	}

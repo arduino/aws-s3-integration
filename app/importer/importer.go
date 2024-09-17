@@ -27,7 +27,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid string, tagsF *string, resolution, timeWindowMinutes int, destinationS3Bucket string, aggregationStat string) error {
+func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid string, tagsF *string, resolution, timeWindowMinutes int, destinationS3Bucket string, aggregationStat string, compress bool) error {
 
 	// Init client
 	iotcl, err := iot.NewClient(key, secret, orgid)
@@ -66,9 +66,20 @@ func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid s
 		writer.Close()
 		defer writer.Delete()
 
+		fileToUpload := writer.GetFilePath()
+		if compress {
+			logger.Infof("Compressing file: %s\n", fileToUpload)
+			compressedFile, err := utils.GzipFileCompression(fileToUpload)
+			if err != nil {
+				return err
+			}
+			fileToUpload = compressedFile
+			logger.Infof("Generated compressed file: %s\n", fileToUpload)
+		}
+
 		destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
-		logger.Infof("Uploading file %s to bucket %s\n", destinationKey, s3cl.DestinationBucket())
-		if err := s3cl.WriteFile(ctx, destinationKey, writer.GetFilePath()); err != nil {
+		logger.Infof("Uploading file %s to bucket %s/%s\n", fileToUpload, s3cl.DestinationBucket(), destinationKey)
+		if err := s3cl.WriteFile(ctx, destinationKey, fileToUpload); err != nil {
 			return err
 		}
 	}

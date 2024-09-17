@@ -78,6 +78,8 @@ These parameters are filled by CFT at stack creation time and can be adjusted la
 | /arduino/s3-exporter/{stack-name}/iot/scheduling | Execution scheduling |
 | /arduino/s3-exporter/{stack-name}/iot/aggregation-statistic | Aggregation statistic |
 
+It is possible to compress (with gzip) files before uploading to S3. To enable compression, add ENABLE_COMPRESSION env variable to lambda configuration (with value true/false).
+
 ### Tag filtering
 
 It is possible to filter only the Arduino Things of interest.
