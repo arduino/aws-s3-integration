@@ -67,6 +67,7 @@ func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid s
 		defer writer.Delete()
 
 		fileToUpload := writer.GetFilePath()
+		destinationKeyFormat := "%s/%s.csv"
 		if compress {
 			logger.Infof("Compressing file: %s\n", fileToUpload)
 			compressedFile, err := utils.GzipFileCompression(fileToUpload)
@@ -75,9 +76,10 @@ func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid s
 			}
 			fileToUpload = compressedFile
 			logger.Infof("Generated compressed file: %s\n", fileToUpload)
+			destinationKeyFormat = "%s/%s.csv.gz"
 		}
 
-		destinationKey := fmt.Sprintf("%s/%s.csv", from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
+		destinationKey := fmt.Sprintf(destinationKeyFormat, from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
 		logger.Infof("Uploading file %s to bucket %s/%s\n", fileToUpload, s3cl.DestinationBucket(), destinationKey)
 		if err := s3cl.WriteFile(ctx, destinationKey, fileToUpload); err != nil {
 			return err
