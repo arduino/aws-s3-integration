@@ -18,6 +18,7 @@ package importer
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/arduino/aws-s3-integration/business/tsextractor"
 	"github.com/arduino/aws-s3-integration/internal/iot"
@@ -77,6 +78,7 @@ func StartImport(ctx context.Context, logger *logrus.Entry, key, secret, orgid s
 			fileToUpload = compressedFile
 			logger.Infof("Generated compressed file: %s\n", fileToUpload)
 			destinationKeyFormat = "%s/%s.csv.gz"
+			defer func(f string) { os.Remove(f) }(fileToUpload)
 		}
 
 		destinationKey := fmt.Sprintf(destinationKeyFormat, from.Format("2006-01-02"), from.Format("2006-01-02-15-04"))
