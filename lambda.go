@@ -101,7 +101,7 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		if tagsParam != nil {
 			tags = tagsParam
 		}
-		aggregationStat, _ = paramReader.ReadConfigByStack(AlignWithTimeWindowStack, stackName)
+		aggregationStat, _ = paramReader.ReadConfigByStack(AggregationStatStack, stackName)
 
 		alignTs, _ := paramReader.ReadConfigByStack(AlignWithTimeWindowStack, stackName)
 		if alignTs != nil && *alignTs == "true" {
