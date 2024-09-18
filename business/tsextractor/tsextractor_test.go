@@ -69,10 +69,12 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 
 	thingId := "91f30213-2bd7-480a-b1dc-f31b01840e7e"
 	propertyId := "c86f4ed9-7f52-4bd3-bdc6-b2936bec68ac"
+	propertyStringId := "a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb"
 
 	// Init client
 	iotcl := iotMocks.NewAPI(t)
 
+	// Time series data extraction mock
 	now := time.Now()
 	responses := []iotclient.ArduinoSeriesResponse{
 		{
@@ -88,9 +90,23 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 	}
 	iotcl.On("GetTimeSeriesByThing", ctx, thingId, mock.Anything, mock.Anything, int64(300), "AVG").Return(&samples, false, nil)
 
+	// Time series sampling mock
+	sampledResponse := []iotclient.ArduinoSeriesSampledResponse{
+		{
+			Query:       fmt.Sprintf("property.%s", propertyStringId),
+			Times:       []time.Time{now.Add(-time.Minute * 2), now.Add(-time.Minute * 1), now},
+			Values:      []any{"a", "b", "c"},
+			CountValues: 3,
+		},
+	}
+	samplesSampled := iotclient.ArduinoSeriesBatchSampled{
+		Responses: sampledResponse,
+	}
+	iotcl.On("GetTimeSeriesStringSampling", ctx, []string{propertyStringId}, mock.Anything, mock.Anything, int32(300)).Return(&samplesSampled, false, nil)
+
 	tsextractorClient := New(iotcl, logger)
 
-	propCount := int64(1)
+	propCount := int64(2)
 	thingsMap := make(map[string]iotclient.ArduinoThing)
 	thingsMap[thingId] = iotclient.ArduinoThing{
 		Id:   thingId,
@@ -100,6 +116,11 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 				Name: "ptest",
 				Id:   propertyId,
 				Type: "FLOAT",
+			},
+			{
+				Name: "pstringVar",
+				Id:   propertyStringId,
+				Type: "CHARSTRING",
 			},
 		},
 		PropertiesCount: &propCount,
@@ -118,13 +139,101 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 	defer outF.Close()
 	content, err := io.ReadAll(outF)
 	assert.NoError(t, err)
+
+	t.Log(string(content))
+
 	entries := []string{
-		"timestamp,thing_id,thing_name,property_id,property_name,property_type,value",
+		"timestamp,thing_id,thing_name,property_id,property_name,property_type,value,aggregation_statistic",
 		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,c86f4ed9-7f52-4bd3-bdc6-b2936bec68ac,ptest,FLOAT,1,AVG",
 		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,c86f4ed9-7f52-4bd3-bdc6-b2936bec68ac,ptest,FLOAT,2,AVG",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,a,",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,b,",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,c,",
 	}
 	for _, entry := range entries {
 		assert.Contains(t, string(content), entry)
 	}
-	fmt.Println(string(content))
+}
+
+func TestExtractionFlow_rawResolution(t *testing.T) {
+	logger := logrus.NewEntry(logrus.New())
+	ctx := context.Background()
+
+	thingId := "91f30213-2bd7-480a-b1dc-f31b01840e7e"
+	propertyId := "c86f4ed9-7f52-4bd3-bdc6-b2936bec68ac"
+	propertyStringId := "a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb"
+
+	// Init client
+	iotcl := iotMocks.NewAPI(t)
+
+	// Time series data extraction mock
+	now := time.Now()
+	responses := []iotclient.ArduinoSeriesRawResponse{
+		{
+			Query:       fmt.Sprintf("property.%s", propertyId),
+			Times:       []time.Time{now.Add(-time.Minute * 1), now},
+			Values:      []any{1.0, 2.0},
+			CountValues: 2,
+		},
+		{
+			Query:       fmt.Sprintf("property.%s", propertyStringId),
+			Times:       []time.Time{now.Add(-time.Minute * 2), now.Add(-time.Minute * 1), now},
+			Values:      []any{"a", "b", "c"},
+			CountValues: 3,
+		},		
+	}
+	samples := iotclient.ArduinoSeriesRawBatch{
+		Responses: responses,
+	}
+	iotcl.On("GetRawTimeSeriesByThing", ctx, thingId, mock.Anything, mock.Anything).Return(&samples, false, nil)
+
+	tsextractorClient := New(iotcl, logger)
+
+	propCount := int64(2)
+	thingsMap := make(map[string]iotclient.ArduinoThing)
+	thingsMap[thingId] = iotclient.ArduinoThing{
+		Id:   thingId,
+		Name: "test",
+		Properties: []iotclient.ArduinoProperty{
+			{
+				Name: "ptest",
+				Id:   propertyId,
+				Type: "FLOAT",
+			},
+			{
+				Name: "pstringVar",
+				Id:   propertyStringId,
+				Type: "CHARSTRING",
+			},
+		},
+		PropertiesCount: &propCount,
+	}
+
+	writer, from, err := tsextractorClient.ExportTSToFile(ctx, 60, thingsMap, -1, "", false)
+	assert.NoError(t, err)
+	assert.NotNil(t, writer)
+	assert.NotNil(t, from)
+
+	writer.Close()
+	defer writer.Delete()
+
+	outF, err := os.Open(writer.GetFilePath())
+	assert.NoError(t, err)
+	defer outF.Close()
+	content, err := io.ReadAll(outF)
+	assert.NoError(t, err)
+
+	t.Log(string(content))
+
+	entries := []string{
+		"timestamp,thing_id,thing_name,property_id,property_name,property_type,value",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,c86f4ed9-7f52-4bd3-bdc6-b2936bec68ac,ptest,FLOAT,1",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,c86f4ed9-7f52-4bd3-bdc6-b2936bec68ac,ptest,FLOAT,2",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,a",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,b",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,c",
+	}
+	for _, entry := range entries {
+		assert.Contains(t, string(content), entry)
+	}
 }
