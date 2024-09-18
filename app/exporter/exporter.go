@@ -28,7 +28,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func StartExporter(ctx context.Context, logger *logrus.Entry, key, secret, orgid string, tagsF *string, resolution, timeWindowMinutes int, destinationS3Bucket string, aggregationStat string, compress bool) error {
+func StartExporter(
+	ctx context.Context,
+	logger *logrus.Entry,
+	key, secret, orgid string,
+	tagsF *string,
+	resolution, timeWindowMinutes int,
+	destinationS3Bucket string,
+	aggregationStat string,
+	compress, enableAlignTimeWindow bool) error {
 
 	// Init client
 	iotcl, err := iot.NewClient(key, secret, orgid)
@@ -36,11 +44,12 @@ func StartExporter(ctx context.Context, logger *logrus.Entry, key, secret, orgid
 		return err
 	}
 
-	if tagsF == nil {
-		logger.Infoln("Things - searching with no filter")
+	if tagsF != nil {
+		logger.Infoln("Filtering things linked to configured account using tags: ", *tagsF)
 	} else {
-		logger.Infoln("Things - searching by tags: ", *tagsF)
+		logger.Infoln("Importing all things linked to configured account")
 	}
+
 	things, err := iotcl.ThingList(ctx, nil, nil, true, utils.ParseTags(tagsF))
 	if err != nil {
 		return err
@@ -60,7 +69,11 @@ func StartExporter(ctx context.Context, logger *logrus.Entry, key, secret, orgid
 		return err
 	}
 
-	if writer, from, err := tsextractorClient.ExportTSToFile(ctx, timeWindowMinutes, thingsMap, resolution, aggregationStat); err != nil {
+	if writer, from, err := tsextractorClient.ExportTSToFile(ctx, timeWindowMinutes, thingsMap, resolution, aggregationStat, enableAlignTimeWindow); err != nil {
+		if writer != nil {
+			writer.Close()
+			defer writer.Delete()
+		}
 		logger.Error("Error aligning time series samples: ", err)
 		return err
 	} else {

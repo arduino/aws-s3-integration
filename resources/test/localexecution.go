@@ -89,7 +89,7 @@ func HandleRequest(ctx context.Context, dev bool) (*string, error) {
 		logger.Infoln("tags:", *tags)
 	}
 
-	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket, "MAX", true)
+	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket, "MAX", true, true)
 	if err != nil {
 		return nil, err
 	}

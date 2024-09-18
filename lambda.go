@@ -33,7 +33,7 @@ type AWSS3ImportTrigger struct {
 const (
 	GlobalArduinoPrefix = "/arduino/s3-importer"
 
-	// Compatibility parameters for backward compatibility
+	// Parameters for backward compatibility
 	IoTApiKey           = GlobalArduinoPrefix + "/iot/api-key"
 	IoTApiSecret        = GlobalArduinoPrefix + "/iot/api-secret"
 	IoTApiOrgId         = GlobalArduinoPrefix + "/iot/org-id"
@@ -53,6 +53,8 @@ const (
 	SchedulingStack          = PerStackArduinoPrefix + "/iot/scheduling"
 	DestinationS3BucketStack = PerStackArduinoPrefix + "/destination-bucket"
 	AggregationStatStack     = PerStackArduinoPrefix + "/iot/aggregation-statistic"
+	AlignWithTimeWindowStack = PerStackArduinoPrefix + "/iot/align_with_time_window"
+	EnableCompressionStack   = PerStackArduinoPrefix + "/enable_compression"
 
 	SamplesResolutionSeconds           = 300
 	DefaultTimeExtractionWindowMinutes = 60
@@ -61,8 +63,8 @@ const (
 func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, error) {
 
 	logger := logrus.NewEntry(logrus.New())
+
 	stackName := os.Getenv("STACK_NAME")
-	compressFile := os.Getenv("ENABLE_COMPRESSION")
 
 	var apikey *string
 	var apiSecret *string
@@ -71,6 +73,8 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	var orgId *string
 	var err error
 	var aggregationStat *string
+	enabledCompression := false
+	enableAlignTimeWindow := false
 
 	logger.Infoln("------ Reading parameters from SSM")
 	paramReader, err := parameters.New()
@@ -98,6 +102,17 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 			tags = tagsParam
 		}
 		aggregationStat, _ = paramReader.ReadConfigByStack(AggregationStatStack, stackName)
+
+		alignTs, _ := paramReader.ReadConfigByStack(AlignWithTimeWindowStack, stackName)
+		if alignTs != nil && *alignTs == "true" {
+			enableAlignTimeWindow = true
+		}
+
+		compression, _ := paramReader.ReadConfigByStack(EnableCompressionStack, stackName)
+		if compression != nil && *compression == "true" {
+			enabledCompression = true
+		}
+
 	} else {
 		apikey, err = paramReader.ReadConfig(IoTApiKey)
 		if err != nil {
@@ -148,11 +163,6 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		resolution = &defReso
 	}
 
-	enabledCompression := false
-	if compressFile == "true" {
-		enabledCompression = true
-	}
-
 	logger.Infoln("------ Running import")
 	if event.Dev || os.Getenv("DEV") == "true" {
 		logger.Infoln("Running in dev mode")
@@ -174,12 +184,14 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		logger.Infoln("resolution:", *resolution, "seconds")
 	}
 	logger.Infoln("aggregation statistic:", *aggregationStat)
-	logger.Infoln("data extraction time windows:", extractionWindowMinutes, "minutes")
+	logger.Infoln("data extraction time window:", *extractionWindowMinutes, "minutes")
 	logger.Infoln("file compression enabled:", enabledCompression)
+	logger.Infoln("align time window:", enableAlignTimeWindow)
 
-	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression)
+	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression, enableAlignTimeWindow)
 	if err != nil {
-		return nil, err
+		message := "Error detected during data export"
+		return &message, err
 	}
 
 	message := "Data exported successfully"

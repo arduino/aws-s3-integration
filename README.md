@@ -1,15 +1,15 @@
 # Arduino AWS S3 CSV exporter
 
 This project provides a way to extract time series samples from Arduino cloud, publishing to a S3 destination bucket.
-Data are extracted at the given resolution via a scheduled Lambda function. Then samples are stored in CSV files and saved to S3.
+Data are extracted at the given resolution via a scheduled Lambda function. Samples are stored in CSV files and saved to S3.
 By default, data extraction is performed every hour (configurable), extracting samples aggregated at 5min resolution (configurable).
-Aggregation is performed as average over aggregation period.
-Non numeric values like strings are sampled at the given resolution.
+Aggregation is performed as average over aggregation period. Non numeric values like strings are sampled at the given resolution.
 
 ## Architecture
 
-S3 exporter is based on a Go lambda function triggered by periodic event from EventBridge.
-Job is configured to extract samples for a 60min time window with the default resolution of 5min.
+S3 exporter is based on a GO Lambda function triggered by periodic event from EventBridge.
+Function is triggered at a fixed rate (by default, 1 hour), starting from the deployment time.
+Rate also define the time extraction window. So, with a 1 hour scheduling, one hour of data are extracted.
 One file is created per execution and contains all samples for selected things. Time series samples are exported at UTC timezone.
 By default, all Arduino things present in the account are exported: it is possible to filter them via [tags](#tag-filtering).
 
@@ -28,6 +28,9 @@ Files are organized by date and files of the same day are grouped.
 <bucket>:2024-09-04/2024-09-04-11-00.csv
 <bucket>:2024-09-04/2024-09-04-12-00.csv
 ```
+
+Data extraction is aligned with function execution time.
+It is possible to align data extracted with extraction time window (for example, export last complete hour) by configuring `/arduino/s3-exporter/{stack-name}/iot/align_with_time_window` property.
 
 ## Deployment via Cloud Formation Template
 
@@ -74,11 +77,11 @@ These parameters are filled by CFT at stack creation time and can be adjusted la
 | /arduino/s3-exporter/{stack-name}/iot/org-id    | (optional) organization id |
 | /arduino/s3-exporter/{stack-name}/iot/filter/tags    | (optional) tags filtering. Syntax: tag=value,tag2=value2  |
 | /arduino/s3-exporter/{stack-name}/iot/samples-resolution  | (optional) samples aggregation resolution (1/5/15 minutes, 1 hour, raw) |
-| /arduino/s3-exporter/{stack-name}/destination-bucket  | S3 destination bucket |
 | /arduino/s3-exporter/{stack-name}/iot/scheduling | Execution scheduling |
+| /arduino/s3-exporter/{stack-name}/iot/align_with_time_window | Align data extraction with time windows (for example, last complte hour) |
 | /arduino/s3-exporter/{stack-name}/iot/aggregation-statistic | Aggregation statistic |
-
-It is possible to compress (with gzip) files before uploading to S3. To enable compression, add ENABLE_COMPRESSION env variable to lambda configuration (with value true/false).
+| /arduino/s3-exporter/{stack-name}/destination-bucket  | S3 destination bucket |
+| /arduino/s3-exporter/{stack-name}/enable_compression  | Compress CSV files with gzip before uploading to S3 bucket |
 
 ### Tag filtering
 

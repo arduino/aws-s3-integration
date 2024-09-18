@@ -18,6 +18,7 @@ package tsextractor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -45,13 +46,18 @@ func New(iotcl iot.API, logger *logrus.Entry) *TsExtractor {
 	return &TsExtractor{iotcl: iotcl, logger: logger}
 }
 
-func computeTimeAlignment(resolutionSeconds, timeWindowInMinutes int) (time.Time, time.Time) {
+func computeTimeAlignment(resolutionSeconds, timeWindowInMinutes int, enableAlignTimeWindow bool) (time.Time, time.Time) {
 	// Compute time alignment
 	if resolutionSeconds <= 60 {
 		resolutionSeconds = 300 // Align to 5 minutes
 	}
-	to := time.Now().Truncate(time.Duration(resolutionSeconds) * time.Second).UTC()
-	if resolutionSeconds <= 900 {
+
+	timeAlignmentSeconds := resolutionSeconds
+	if enableAlignTimeWindow {
+		timeAlignmentSeconds = timeWindowInMinutes * 60
+	}
+	to := time.Now().Truncate(time.Duration(timeAlignmentSeconds) * time.Second).UTC()
+	if !enableAlignTimeWindow && resolutionSeconds <= 900 {
 		// Shift time window to avoid missing data
 		to = to.Add(-time.Duration(300) * time.Second)
 	}
@@ -68,10 +74,11 @@ func (a *TsExtractor) ExportTSToFile(
 	timeWindowInMinutes int,
 	thingsMap map[string]iotclient.ArduinoThing,
 	resolution int,
-	aggregationStat string) (*csv.CsvWriter, time.Time, error) {
+	aggregationStat string,
+	enableAlignTimeWindow bool) (*csv.CsvWriter, time.Time, error) {
 
 	// Truncate time to given resolution
-	from, to := computeTimeAlignment(resolution, timeWindowInMinutes)
+	from, to := computeTimeAlignment(resolution, timeWindowInMinutes, enableAlignTimeWindow)
 
 	// Open csv output writer
 	writer, err := csv.NewWriter(from, a.logger, isRawResolution(resolution))
@@ -81,6 +88,7 @@ func (a *TsExtractor) ExportTSToFile(
 
 	var wg sync.WaitGroup
 	tokens := make(chan struct{}, importConcurrency)
+	errorChannel := make(chan error, len(thingsMap))
 
 	if isRawResolution(resolution) {
 		a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to, " - aggregation: raw")
@@ -106,6 +114,7 @@ func (a *TsExtractor) ExportTSToFile(
 				err := a.populateRawTSDataIntoS3(ctx, from, to, thingID, thing, writer)
 				if err != nil {
 					a.logger.Error("Error populating raw time series data: ", err)
+					errorChannel <- err
 					return
 				}
 			} else {
@@ -113,6 +122,7 @@ func (a *TsExtractor) ExportTSToFile(
 				err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, aggregationStat, writer)
 				if err != nil {
 					a.logger.Error("Error populating time series data: ", err)
+					errorChannel <- err
 					return
 				}
 
@@ -120,6 +130,7 @@ func (a *TsExtractor) ExportTSToFile(
 				err = a.populateStringTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
 				if err != nil {
 					a.logger.Error("Error populating string time series data: ", err)
+					errorChannel <- err
 					return
 				}
 			}
@@ -129,6 +140,18 @@ func (a *TsExtractor) ExportTSToFile(
 	// Wait for all routines termination
 	a.logger.Infoln("Waiting for all data extraction jobs to terminate...")
 	wg.Wait()
+	close(errorChannel)
+
+	// Check if there were errors
+	detectedErrors := false
+	for err := range errorChannel {
+		if err != nil {
+			a.logger.Error(err)
+		}
+	}
+	if detectedErrors {
+		return writer, from, errors.New("errors detected during data export")
+	}
 
 	return writer, from, nil
 }
