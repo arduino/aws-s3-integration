@@ -16,32 +16,46 @@ import (
 )
 
 func TestTimeAlignment_HourlyTimeWindows(t *testing.T) {
-	// Test the time alignment with hourly time windows
-	from, to := computeTimeAlignment(3600, 60)
+	// Test the time alignment with hourly time windows, not aligned
+	nowTruncated := time.Now().UTC().Truncate(time.Duration(300) * time.Second).Add(-time.Duration(300) * time.Second)
+	fromTuncated := nowTruncated.Add(-time.Hour)
+	from, to := computeTimeAlignment(300, 60, false)
 	assert.Equal(t, int64(3600), to.Unix()-from.Unix())
+	assert.Equal(t, nowTruncated, to)
+	assert.Equal(t, fromTuncated, from)
+}
+
+func TestTimeAlignment_HourlyTimeWindows_aligned(t *testing.T) {
+	// Test the time alignment with hourly time windows, complete last hour
+	nowTruncated := time.Now().UTC().Truncate(time.Hour)
+	fromTuncated := nowTruncated.Add(-time.Hour)
+	from, to := computeTimeAlignment(300, 60, true)
+	assert.Equal(t, int64(3600), to.Unix()-from.Unix())
+	assert.Equal(t, nowTruncated, to)
+	assert.Equal(t, fromTuncated, from)
 }
 
 func TestTimeAlignment_15minTimeWindows(t *testing.T) {
 	// Test the time alignment with hourly time windows
-	from, to := computeTimeAlignment(3600, 15)
+	from, to := computeTimeAlignment(3600, 15, false)
 	assert.Equal(t, int64(900), to.Unix()-from.Unix())
 }
 
 func TestTimeAlignment_15min_HourlyTimeWindows(t *testing.T) {
 	// Test the time alignment with hourly time windows and 15min resolution
-	from, to := computeTimeAlignment(900, 60)
+	from, to := computeTimeAlignment(900, 60, false)
 	assert.Equal(t, int64(3600), to.Unix()-from.Unix())
 }
 
 func TestTimeAlignment_5min_HourlyTimeWindows(t *testing.T) {
 	// Test the time alignment with hourly time windows and 5min resolution
-	from, to := computeTimeAlignment(300, 60)
+	from, to := computeTimeAlignment(300, 60, false)
 	assert.Equal(t, int64(3600), to.Unix()-from.Unix())
 }
 
 func TestTimeAlignment_raw_HourlyTimeWindows(t *testing.T) {
 	// Test the time alignment with hourly time windows and 5min resolution
-	from, to := computeTimeAlignment(-1, 60)
+	from, to := computeTimeAlignment(-1, 60, false)
 	assert.Equal(t, int64(3600), to.Unix()-from.Unix())
 }
 
@@ -91,7 +105,7 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 		PropertiesCount: &propCount,
 	}
 
-	writer, from, err := tsextractorClient.ExportTSToFile(ctx, 60, thingsMap, 300, "AVG")
+	writer, from, err := tsextractorClient.ExportTSToFile(ctx, 60, thingsMap, 300, "AVG", false)
 	assert.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.NotNil(t, from)

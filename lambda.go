@@ -61,8 +61,10 @@ const (
 func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, error) {
 
 	logger := logrus.NewEntry(logrus.New())
+
 	stackName := os.Getenv("STACK_NAME")
 	compressFile := os.Getenv("ENABLE_COMPRESSION")
+	alignTimeWindow := os.Getenv("ALIGN_TIME_WINDOW")
 
 	var apikey *string
 	var apiSecret *string
@@ -152,6 +154,10 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	if compressFile == "true" {
 		enabledCompression = true
 	}
+	enableAlignTimeWindow := false
+	if alignTimeWindow == "true" {
+		enableAlignTimeWindow = true
+	}
 
 	logger.Infoln("------ Running import")
 	if event.Dev || os.Getenv("DEV") == "true" {
@@ -174,10 +180,11 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		logger.Infoln("resolution:", *resolution, "seconds")
 	}
 	logger.Infoln("aggregation statistic:", *aggregationStat)
-	logger.Infoln("data extraction time windows:", extractionWindowMinutes, "minutes")
+	logger.Infoln("data extraction time window:", *extractionWindowMinutes, "minutes")
 	logger.Infoln("file compression enabled:", enabledCompression)
+	logger.Infoln("align time window:", enableAlignTimeWindow)
 
-	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression)
+	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression, enableAlignTimeWindow)
 	if err != nil {
 		return nil, err
 	}

@@ -45,13 +45,18 @@ func New(iotcl iot.API, logger *logrus.Entry) *TsExtractor {
 	return &TsExtractor{iotcl: iotcl, logger: logger}
 }
 
-func computeTimeAlignment(resolutionSeconds, timeWindowInMinutes int) (time.Time, time.Time) {
+func computeTimeAlignment(resolutionSeconds, timeWindowInMinutes int, enableAlignTimeWindow bool) (time.Time, time.Time) {
 	// Compute time alignment
 	if resolutionSeconds <= 60 {
 		resolutionSeconds = 300 // Align to 5 minutes
 	}
-	to := time.Now().Truncate(time.Duration(resolutionSeconds) * time.Second).UTC()
-	if resolutionSeconds <= 900 {
+
+	timeAlignmentSeconds := resolutionSeconds
+	if enableAlignTimeWindow {
+		timeAlignmentSeconds = timeWindowInMinutes * 60
+	}
+	to := time.Now().Truncate(time.Duration(timeAlignmentSeconds) * time.Second).UTC()
+	if !enableAlignTimeWindow && resolutionSeconds <= 900 {
 		// Shift time window to avoid missing data
 		to = to.Add(-time.Duration(300) * time.Second)
 	}
@@ -68,10 +73,11 @@ func (a *TsExtractor) ExportTSToFile(
 	timeWindowInMinutes int,
 	thingsMap map[string]iotclient.ArduinoThing,
 	resolution int,
-	aggregationStat string) (*csv.CsvWriter, time.Time, error) {
+	aggregationStat string,
+	enableAlignTimeWindow bool) (*csv.CsvWriter, time.Time, error) {
 
 	// Truncate time to given resolution
-	from, to := computeTimeAlignment(resolution, timeWindowInMinutes)
+	from, to := computeTimeAlignment(resolution, timeWindowInMinutes, enableAlignTimeWindow)
 
 	// Open csv output writer
 	writer, err := csv.NewWriter(from, a.logger, isRawResolution(resolution))
