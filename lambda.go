@@ -53,6 +53,8 @@ const (
 	SchedulingStack          = PerStackArduinoPrefix + "/iot/scheduling"
 	DestinationS3BucketStack = PerStackArduinoPrefix + "/destination-bucket"
 	AggregationStatStack     = PerStackArduinoPrefix + "/iot/aggregation-statistic"
+	AlignWithTimeWindowStack = PerStackArduinoPrefix + "/iot/align_with_time_window"
+	EnableCompressionStack   = PerStackArduinoPrefix + "/enable_compression"
 
 	SamplesResolutionSeconds           = 300
 	DefaultTimeExtractionWindowMinutes = 60
@@ -63,8 +65,6 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	logger := logrus.NewEntry(logrus.New())
 
 	stackName := os.Getenv("STACK_NAME")
-	compressFile := os.Getenv("ENABLE_COMPRESSION")
-	alignTimeWindow := os.Getenv("ALIGN_TIME_WINDOW")
 
 	var apikey *string
 	var apiSecret *string
@@ -73,6 +73,8 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	var orgId *string
 	var err error
 	var aggregationStat *string
+	enabledCompression := false
+	enableAlignTimeWindow := false
 
 	logger.Infoln("------ Reading parameters from SSM")
 	paramReader, err := parameters.New()
@@ -99,7 +101,18 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		if tagsParam != nil {
 			tags = tagsParam
 		}
-		aggregationStat, _ = paramReader.ReadConfigByStack(AggregationStatStack, stackName)
+		aggregationStat, _ = paramReader.ReadConfigByStack(AlignWithTimeWindowStack, stackName)
+
+		alignTs, _ := paramReader.ReadConfigByStack(AlignWithTimeWindowStack, stackName)
+		if alignTs != nil && *alignTs == "true" {
+			enableAlignTimeWindow = true
+		}
+
+		compression, _ := paramReader.ReadConfigByStack(EnableCompressionStack, stackName)
+		if compression != nil && *compression == "true" {
+			enabledCompression = true
+		}
+
 	} else {
 		apikey, err = paramReader.ReadConfig(IoTApiKey)
 		if err != nil {
@@ -148,15 +161,6 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 		logger.Warn("Resolution must be greater than 60 seconds for time windows greater than 60 minutes. Setting resolution to 5 minutes.")
 		defReso := SamplesResolutionSeconds
 		resolution = &defReso
-	}
-
-	enabledCompression := false
-	if compressFile == "true" {
-		enabledCompression = true
-	}
-	enableAlignTimeWindow := false
-	if alignTimeWindow == "true" {
-		enableAlignTimeWindow = true
 	}
 
 	logger.Infoln("------ Running import")

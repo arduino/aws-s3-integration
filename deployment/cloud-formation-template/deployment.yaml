@@ -197,6 +197,22 @@ Resources:
         Ref: ResolutionAggregationStatistic
       Tier: Standard
 
+  CompressionParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/enable_compression
+      Type: String
+      Value: "false"
+      Tier: Standard
+
+  AlignExtractionParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /arduino/s3-exporter/${AWS::StackName}/iot/align_with_time_window
+      Type: String
+      Value: "false"
+      Tier: Standard
+
   # EventBridge Rule to trigger Lambda every hour
   EventBridgeRule:
     Type: AWS::Events::Rule

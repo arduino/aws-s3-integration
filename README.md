@@ -29,6 +29,9 @@ Files are organized by date and files of the same day are grouped.
 <bucket>:2024-09-04/2024-09-04-12-00.csv
 ```
 
+Data extraction is aligned with function execution time.
+It is possible to align data extracted with extraction time window (for example, export last complete hour) by configuring `/arduino/s3-exporter/{stack-name}/iot/align_with_time_window` property.
+
 ## Deployment via Cloud Formation Template
 
 It is possible to deploy required resources via [cloud formation template](deployment/cloud-formation-template/deployment.yaml)
@@ -74,11 +77,11 @@ These parameters are filled by CFT at stack creation time and can be adjusted la
 | /arduino/s3-exporter/{stack-name}/iot/org-id    | (optional) organization id |
 | /arduino/s3-exporter/{stack-name}/iot/filter/tags    | (optional) tags filtering. Syntax: tag=value,tag2=value2  |
 | /arduino/s3-exporter/{stack-name}/iot/samples-resolution  | (optional) samples aggregation resolution (1/5/15 minutes, 1 hour, raw) |
-| /arduino/s3-exporter/{stack-name}/destination-bucket  | S3 destination bucket |
 | /arduino/s3-exporter/{stack-name}/iot/scheduling | Execution scheduling |
+| /arduino/s3-exporter/{stack-name}/iot/align_with_time_window | Align data extraction with time windows (for example, last complte hour) |
 | /arduino/s3-exporter/{stack-name}/iot/aggregation-statistic | Aggregation statistic |
-
-It is possible to compress (with gzip) files before uploading to S3. To enable compression, add ENABLE_COMPRESSION env variable to lambda configuration (with value true/false).
+| /arduino/s3-exporter/{stack-name}/destination-bucket  | S3 destination bucket |
+| /arduino/s3-exporter/{stack-name}/enable_compression  | Compress CSV files with gzip before uploading to S3 bucket |
 
 ### Tag filtering
 
