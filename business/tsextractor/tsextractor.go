@@ -18,6 +18,7 @@ package tsextractor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -87,6 +88,7 @@ func (a *TsExtractor) ExportTSToFile(
 
 	var wg sync.WaitGroup
 	tokens := make(chan struct{}, importConcurrency)
+	errorChannel := make(chan error, len(thingsMap))
 
 	if isRawResolution(resolution) {
 		a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to, " - aggregation: raw")
@@ -112,6 +114,7 @@ func (a *TsExtractor) ExportTSToFile(
 				err := a.populateRawTSDataIntoS3(ctx, from, to, thingID, thing, writer)
 				if err != nil {
 					a.logger.Error("Error populating raw time series data: ", err)
+					errorChannel <- err
 					return
 				}
 			} else {
@@ -119,6 +122,7 @@ func (a *TsExtractor) ExportTSToFile(
 				err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, aggregationStat, writer)
 				if err != nil {
 					a.logger.Error("Error populating time series data: ", err)
+					errorChannel <- err
 					return
 				}
 
@@ -126,6 +130,7 @@ func (a *TsExtractor) ExportTSToFile(
 				err = a.populateStringTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
 				if err != nil {
 					a.logger.Error("Error populating string time series data: ", err)
+					errorChannel <- err
 					return
 				}
 			}
@@ -135,6 +140,18 @@ func (a *TsExtractor) ExportTSToFile(
 	// Wait for all routines termination
 	a.logger.Infoln("Waiting for all data extraction jobs to terminate...")
 	wg.Wait()
+	close(errorChannel)
+
+	// Check if there were errors
+	detectedErrors := false
+	for err := range errorChannel {
+		if err != nil {
+			a.logger.Error(err)
+		}
+	}
+	if detectedErrors {
+		return writer, from, errors.New("errors detected during data export")
+	}
 
 	return writer, from, nil
 }

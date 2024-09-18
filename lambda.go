@@ -33,7 +33,7 @@ type AWSS3ImportTrigger struct {
 const (
 	GlobalArduinoPrefix = "/arduino/s3-importer"
 
-	// Compatibility parameters for backward compatibility
+	// Parameters for backward compatibility
 	IoTApiKey           = GlobalArduinoPrefix + "/iot/api-key"
 	IoTApiSecret        = GlobalArduinoPrefix + "/iot/api-secret"
 	IoTApiOrgId         = GlobalArduinoPrefix + "/iot/org-id"
@@ -190,7 +190,8 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 
 	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression, enableAlignTimeWindow)
 	if err != nil {
-		return nil, err
+		message := "Error detected during data export"
+		return &message, err
 	}
 
 	message := "Data exported successfully"

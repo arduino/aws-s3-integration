@@ -70,6 +70,10 @@ func StartExporter(
 	}
 
 	if writer, from, err := tsextractorClient.ExportTSToFile(ctx, timeWindowMinutes, thingsMap, resolution, aggregationStat, enableAlignTimeWindow); err != nil {
+		if writer != nil {
+			writer.Close()
+			defer writer.Delete()
+		}
 		logger.Error("Error aligning time series samples: ", err)
 		return err
 	} else {
