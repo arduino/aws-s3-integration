@@ -31,6 +31,7 @@ type API interface {
 	GetTimeSeriesByThing(ctx context.Context, thingID string, from, to time.Time, interval int64, aggregationStat string) (*iotclient.ArduinoSeriesBatch, bool, error)
 	GetTimeSeriesStringSampling(ctx context.Context, properties []string, from, to time.Time, interval int32) (*iotclient.ArduinoSeriesBatchSampled, bool, error)
 	GetRawTimeSeriesByThing(ctx context.Context, thingID string, from, to time.Time) (*iotclient.ArduinoSeriesRawBatch, bool, error)
+	GetPropertiesLastValue(ctx context.Context, properties []string, thingId string) (*iotclient.ArduinoSeriesRawBatchLastvalue, bool, error)
 }
 
 // Client can perform actions on Arduino IoT Cloud.
@@ -225,6 +226,48 @@ func (cl *Client) GetRawTimeSeriesByThing(ctx context.Context, thingID string, f
 	ts, httpResponse, err := cl.api.SeriesV2Api.SeriesV2BatchQueryRawExecute(request)
 	if err != nil {
 		err = fmt.Errorf("retrieving raw time series: %w", errorDetail(err))
+		if httpResponse != nil && httpResponse.StatusCode == 429 { // Retry if rate limited
+			return nil, true, err
+		}
+		return nil, false, err
+	}
+	return ts, false, nil
+}
+
+func (cl *Client) GetPropertiesLastValue(ctx context.Context, properties []string, thingId string) (*iotclient.ArduinoSeriesRawBatchLastvalue, bool, error) {
+	if len(properties) == 0 {
+		return nil, false, fmt.Errorf("no properties provided")
+	}
+
+	ctx, err := ctxWithToken(ctx, cl.token)
+	if err != nil {
+		return nil, false, err
+	}
+
+	requests := make([]iotclient.BatchQueryRawLastValueRequestMediaV1, 0, len(properties))
+	for _, prop := range properties {
+		if prop == "" {
+			continue
+		}
+		requests = append(requests, iotclient.BatchQueryRawLastValueRequestMediaV1{
+			PropertyId: prop,
+			ThingId:    thingId,
+		})
+	}
+
+	if len(requests) == 0 {
+		return nil, false, fmt.Errorf("no valid properties provided")
+	}
+
+	batchQueryRequestsMediaV1 := iotclient.BatchLastValueRequestsMediaV1{
+		Requests: requests,
+	}
+
+	request := cl.api.SeriesV2Api.SeriesV2BatchQueryRawLastValue(ctx)
+	request = request.BatchLastValueRequestsMediaV1(batchQueryRequestsMediaV1)
+	ts, httpResponse, err := cl.api.SeriesV2Api.SeriesV2BatchQueryRawLastValueExecute(request)
+	if err != nil {
+		err = fmt.Errorf("retrieving time series last value: %w", errorDetail(err))
 		if httpResponse != nil && httpResponse.StatusCode == 429 { // Retry if rate limited
 			return nil, true, err
 		}
