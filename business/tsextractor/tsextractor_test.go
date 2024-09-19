@@ -125,13 +125,13 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 				Type: "CHARSTRING",
 			},
 			{
-				Name: "pOnChange",
-				Id:   propertyIdOnChange,
-				Type: "FLOAT",
+				Name:           "pOnChange",
+				Id:             propertyIdOnChange,
+				Type:           "FLOAT",
 				UpdateStrategy: "ON_CHANGE",
-				LastValue: 2.34,
+				LastValue:      2.34,
 				ValueUpdatedAt: &lastValueTime,
-			},			
+			},
 		},
 		PropertiesCount: &propCount,
 	}
@@ -174,6 +174,7 @@ func TestExtractionFlow_rawResolution(t *testing.T) {
 	propertyId := "c86f4ed9-7f52-4bd3-bdc6-b2936bec68ac"
 	propertyStringId := "a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb"
 	propertyIdOnChange := "b77f4ed5-7f52-4bd3-bdc6-b2936bec12de"
+	propertyIdNotImport := "b88f4ed5-7f52-4bd3-bdc6-b2936bec12de"
 
 	// Init client
 	iotcl := iotMocks.NewAPI(t)
@@ -219,13 +220,21 @@ func TestExtractionFlow_rawResolution(t *testing.T) {
 				Type: "CHARSTRING",
 			},
 			{
-				Name: "pOnChange",
-				Id:   propertyIdOnChange,
-				Type: "FLOAT",
+				Name:           "pOnChange",
+				Id:             propertyIdOnChange,
+				Type:           "FLOAT",
 				UpdateStrategy: "ON_CHANGE",
-				LastValue: 2.34,
+				LastValue:      2.34,
 				ValueUpdatedAt: &lastValueTime,
-			},			
+			},
+			{
+				Name:           "pNOIMPORT",
+				Id:             propertyIdNotImport,
+				Type:           "SCHEDULER",
+				UpdateStrategy: "ON_CHANGE",
+				LastValue:      "{}",
+				ValueUpdatedAt: &lastValueTime,
+			},
 		},
 		PropertiesCount: &propCount,
 	}
@@ -257,5 +266,6 @@ func TestExtractionFlow_rawResolution(t *testing.T) {
 	}
 	for _, entry := range entries {
 		assert.Contains(t, string(content), entry)
+		assert.NotContains(t, string(content), "pNOIMPORT")
 	}
 }

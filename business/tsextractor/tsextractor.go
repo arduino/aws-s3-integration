@@ -296,7 +296,7 @@ func extractPropertyNameAndType(thing iotclient.ArduinoThing, propertyID string)
 }
 
 func isStringProperty(ptype string) bool {
-	return ptype == "CHARSTRING" || ptype == "LOCATION"
+	return iot.IsPropertyString(ptype) || iot.IsPropertyLocation(ptype)
 }
 
 func (a *TsExtractor) populateStringTSDataIntoS3(
@@ -460,6 +460,10 @@ func (a *TsExtractor) interfaceToString(value interface{}) string {
 	}
 }
 
+func isLastValueAllowedProperty(prop iotclient.ArduinoProperty) bool {
+	return prop.UpdateStrategy == "ON_CHANGE" && (isStringProperty(prop.Type) || iot.IsPropertyBool(prop.Type) || iot.IsPropertyNumberType(prop.Type))
+}
+
 func (a *TsExtractor) populateLastValueSamplesForOnChangeProperties(
 	isRaw bool,
 	thing iotclient.ArduinoThing,
@@ -473,15 +477,16 @@ func (a *TsExtractor) populateLastValueSamplesForOnChangeProperties(
 	samples := [][]string{}
 	sampleCount := 0
 	for _, prop := range thing.Properties {
-		if prop.UpdateStrategy == "ON_CHANGE" && !slices.Contains(propertiesWithExtractedValue, prop.Id) {
+		if isLastValueAllowedProperty(prop) && !slices.Contains(propertiesWithExtractedValue, prop.Id) {
 			if prop.ValueUpdatedAt == nil {
 				continue
 			}
+			propName, propType := extractPropertyNameAndType(thing, prop.Id)
 			var toAdd []string
 			if isRaw {
-				toAdd = composeRawRow(*prop.ValueUpdatedAt, thing.Id, thing.Name, prop.Id, prop.Name, prop.Type, a.interfaceToString(prop.LastValue))
+				toAdd = composeRawRow(*prop.ValueUpdatedAt, thing.Id, thing.Name, prop.Id, propName, propType, a.interfaceToString(prop.LastValue))
 			} else {
-				toAdd = composeRow(*prop.ValueUpdatedAt, thing.Id, thing.Name, prop.Id, prop.Name, prop.Type, a.interfaceToString(prop.LastValue), "LAST_VALUE")
+				toAdd = composeRow(*prop.ValueUpdatedAt, thing.Id, thing.Name, prop.Id, propName, propType, a.interfaceToString(prop.LastValue), "LAST_VALUE")
 			}
 			samples = append(samples, toAdd)
 			sampleCount++
