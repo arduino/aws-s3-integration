@@ -17,43 +17,6 @@ type API struct {
 	mock.Mock
 }
 
-// GetPropertiesLastValue provides a mock function with given fields: ctx, properties, thingId
-func (_m *API) GetPropertiesLastValue(ctx context.Context, properties []string, thingId string) (*iot.ArduinoSeriesRawBatchLastvalue, bool, error) {
-	ret := _m.Called(ctx, properties, thingId)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetPropertiesLastValue")
-	}
-
-	var r0 *iot.ArduinoSeriesRawBatchLastvalue
-	var r1 bool
-	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, []string, string) (*iot.ArduinoSeriesRawBatchLastvalue, bool, error)); ok {
-		return rf(ctx, properties, thingId)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, []string, string) *iot.ArduinoSeriesRawBatchLastvalue); ok {
-		r0 = rf(ctx, properties, thingId)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*iot.ArduinoSeriesRawBatchLastvalue)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, []string, string) bool); ok {
-		r1 = rf(ctx, properties, thingId)
-	} else {
-		r1 = ret.Get(1).(bool)
-	}
-
-	if rf, ok := ret.Get(2).(func(context.Context, []string, string) error); ok {
-		r2 = rf(ctx, properties, thingId)
-	} else {
-		r2 = ret.Error(2)
-	}
-
-	return r0, r1, r2
-}
-
 // GetRawTimeSeriesByThing provides a mock function with given fields: ctx, thingID, from, to
 func (_m *API) GetRawTimeSeriesByThing(ctx context.Context, thingID string, from time.Time, to time.Time) (*iot.ArduinoSeriesRawBatch, bool, error) {
 	ret := _m.Called(ctx, thingID, from, to)

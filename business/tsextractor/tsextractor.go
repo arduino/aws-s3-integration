@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -95,10 +96,10 @@ func (a *TsExtractor) ExportTSToFile(
 	} else {
 		a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to, " - aggregation: ", aggregationStat)
 	}
-	for thingID, thing := range thingsMap {
+	for _, thing := range thingsMap {
 
 		if len(thing.Properties) == 0 {
-			a.logger.Warn("Skipping thing with no properties: ", thingID)
+			a.logger.Warn("Skipping thing with no properties: ", thing.Id)
 			continue
 		}
 
@@ -109,31 +110,51 @@ func (a *TsExtractor) ExportTSToFile(
 			defer func() { <-tokens }()
 			defer wg.Done()
 
-			if isRawResolution(resolution) {
+			detectedProperties := []string{}
+			isRaw := isRawResolution(resolution)
+			if isRaw {
 				// Populate raw time series data
-				err := a.populateRawTSDataIntoS3(ctx, from, to, thing, writer)
+				populatedProperties, err := a.populateRawTSDataIntoS3(ctx, from, to, thing, writer)
 				if err != nil {
 					a.logger.Error("Error populating raw time series data: ", err)
 					errorChannel <- err
 					return
 				}
+				if len(populatedProperties) > 0 {
+					detectedProperties = append(detectedProperties, populatedProperties...)
+				}
 			} else {
 				// Populate numeric time series data
-				err := a.populateNumericTSDataIntoS3(ctx, from, to, thing, resolution, aggregationStat, writer)
+				populatedProperties, err := a.populateNumericTSDataIntoS3(ctx, from, to, thing, resolution, aggregationStat, writer)
 				if err != nil {
 					a.logger.Error("Error populating time series data: ", err)
 					errorChannel <- err
 					return
 				}
+				if len(populatedProperties) > 0 {
+					detectedProperties = append(detectedProperties, populatedProperties...)
+				}
 
 				// Populate string time series data, if any
-				err = a.populateStringTSDataIntoS3(ctx, from, to, thing, resolution, writer)
+				populatedProperties, err = a.populateStringTSDataIntoS3(ctx, from, to, thing, resolution, writer)
 				if err != nil {
 					a.logger.Error("Error populating string time series data: ", err)
 					errorChannel <- err
 					return
 				}
+				if len(populatedProperties) > 0 {
+					detectedProperties = append(detectedProperties, populatedProperties...)
+				}
 			}
+
+			// Populate last value samples for ON_CHANGE properties, if needed
+			err = a.populateLastValueSamplesForOnChangeProperties(isRaw, thing, detectedProperties, writer)
+			if err != nil {
+				a.logger.Error("Error populating last value data: ", err)
+				errorChannel <- err
+				return
+			}
+
 		}(thing, writer)
 	}
 
@@ -174,12 +195,13 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	thing iotclient.ArduinoThing,
 	resolution int,
 	aggregationStat string,
-	writer *csv.CsvWriter) error {
+	writer *csv.CsvWriter) ([]string, error) {
 
 	if resolution <= 60 {
 		resolution = 60
 	}
 
+	populatedProperties := []string{}
 	var batched *iotclient.ArduinoSeriesBatch
 	var err error
 	var retry bool
@@ -194,7 +216,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 		}
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	sampleCount := int64(0)
@@ -214,6 +236,9 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 
 			ts := response.Times[i]
 			value := response.Values[i]
+			if !slices.Contains(populatedProperties, propertyID) {
+				populatedProperties = append(populatedProperties, propertyID)
+			}
 			samples = append(samples, composeRow(ts, thing.Id, thing.Name, propertyID, propertyName, propertyType, strconv.FormatFloat(value, 'f', -1, 64), aggregationStat))
 		}
 	}
@@ -221,12 +246,12 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	// Write samples to csv ouput file
 	if len(samples) > 0 {
 		if err := writer.Write(samples); err != nil {
-			return err
+			return nil, err
 		}
 		a.logger.Debugf("Thing %s [%s] saved %d values\n", thing.Id, thing.Name, sampleCount)
 	}
 
-	return nil
+	return populatedProperties, nil
 }
 
 func composeRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, propertyType string, value string, aggregation string) []string {
@@ -280,7 +305,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 	to time.Time,
 	thing iotclient.ArduinoThing,
 	resolution int,
-	writer *csv.CsvWriter) error {
+	writer *csv.CsvWriter) ([]string, error) {
 
 	// Filter properties by char type
 	stringProperties := []string{}
@@ -291,9 +316,10 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 	}
 
 	if len(stringProperties) == 0 {
-		return nil
+		return nil, nil
 	}
 
+	populatedProperties := []string{}
 	var batched *iotclient.ArduinoSeriesBatchSampled
 	var err error
 	var retry bool
@@ -308,7 +334,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 		}
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	sampleCount := int64(0)
@@ -331,6 +357,9 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			if value == nil {
 				continue
 			}
+			if !slices.Contains(populatedProperties, propertyID) {
+				populatedProperties = append(populatedProperties, propertyID)
+			}
 			samples = append(samples, composeRow(ts, thing.Id, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value), ""))
 		}
 	}
@@ -338,12 +367,12 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 	// Write samples to csv ouput file
 	if len(samples) > 0 {
 		if err := writer.Write(samples); err != nil {
-			return err
+			return nil, err
 		}
 		a.logger.Debugf("Thing %s [%s] string properties saved %d values\n", thing.Id, thing.Name, sampleCount)
 	}
 
-	return nil
+	return populatedProperties, nil
 }
 
 func (a *TsExtractor) populateRawTSDataIntoS3(
@@ -351,8 +380,9 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 	from time.Time,
 	to time.Time,
 	thing iotclient.ArduinoThing,
-	writer *csv.CsvWriter) error {
+	writer *csv.CsvWriter) ([]string, error) {
 
+	populatedProperties := []string{}
 	var batched *iotclient.ArduinoSeriesRawBatch
 	var err error
 	var retry bool
@@ -367,7 +397,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 		}
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	sampleCount := int64(0)
@@ -390,6 +420,9 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 			if value == nil {
 				continue
 			}
+			if !slices.Contains(populatedProperties, propertyID) {
+				populatedProperties = append(populatedProperties, propertyID)
+			}
 			samples = append(samples, composeRawRow(ts, thing.Id, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value)))
 		}
 	}
@@ -397,12 +430,12 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 	// Write samples to csv ouput file
 	if len(samples) > 0 {
 		if err := writer.Write(samples); err != nil {
-			return err
+			return nil, err
 		}
 		a.logger.Debugf("Thing %s [%s] raw data saved %d values\n", thing.Id, thing.Name, sampleCount)
 	}
 
-	return nil
+	return populatedProperties, nil
 }
 
 func (a *TsExtractor) interfaceToString(value interface{}) string {
@@ -425,4 +458,43 @@ func (a *TsExtractor) interfaceToString(value interface{}) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+func (a *TsExtractor) populateLastValueSamplesForOnChangeProperties(
+	isRaw bool,
+	thing iotclient.ArduinoThing,
+	propertiesWithExtractedValue []string,
+	writer *csv.CsvWriter) error {
+
+	// Check if there are ON_CHANGE properties
+	if len(thing.Properties) == 0 {
+		return nil
+	}
+	samples := [][]string{}
+	sampleCount := 0
+	for _, prop := range thing.Properties {
+		if prop.UpdateStrategy == "ON_CHANGE" && !slices.Contains(propertiesWithExtractedValue, prop.Id) {
+			if prop.ValueUpdatedAt == nil {
+				continue
+			}
+			var toAdd []string
+			if isRaw {
+				toAdd = composeRawRow(*prop.ValueUpdatedAt, thing.Id, thing.Name, prop.Id, prop.Name, prop.Type, a.interfaceToString(prop.LastValue))
+			} else {
+				toAdd = composeRow(*prop.ValueUpdatedAt, thing.Id, thing.Name, prop.Id, prop.Name, prop.Type, a.interfaceToString(prop.LastValue), "LAST_VALUE")
+			}
+			samples = append(samples, toAdd)
+			sampleCount++
+		}
+	}
+
+	// Write samples to csv ouput file
+	if len(samples) > 0 {
+		if err := writer.Write(samples); err != nil {
+			return err
+		}
+		a.logger.Debugf("Thing %s [%s] last value data saved %d values\n", thing.Id, thing.Name, sampleCount)
+	}
+
+	return nil
 }

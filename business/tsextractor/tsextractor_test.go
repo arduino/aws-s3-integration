@@ -180,7 +180,7 @@ func TestExtractionFlow_rawResolution(t *testing.T) {
 			Times:       []time.Time{now.Add(-time.Minute * 2), now.Add(-time.Minute * 1), now},
 			Values:      []any{"a", "b", "c"},
 			CountValues: 3,
-		},		
+		},
 	}
 	samples := iotclient.ArduinoSeriesRawBatch{
 		Responses: responses,
