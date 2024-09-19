@@ -70,6 +70,7 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 	thingId := "91f30213-2bd7-480a-b1dc-f31b01840e7e"
 	propertyId := "c86f4ed9-7f52-4bd3-bdc6-b2936bec68ac"
 	propertyStringId := "a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb"
+	propertyIdOnChange := "b77f4ed5-7f52-4bd3-bdc6-b2936bec12de"
 
 	// Init client
 	iotcl := iotMocks.NewAPI(t)
@@ -106,7 +107,8 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 
 	tsextractorClient := New(iotcl, logger)
 
-	propCount := int64(2)
+	lastValueTime := now.Add(-time.Minute * 1)
+	propCount := int64(3)
 	thingsMap := make(map[string]iotclient.ArduinoThing)
 	thingsMap[thingId] = iotclient.ArduinoThing{
 		Id:   thingId,
@@ -122,6 +124,14 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 				Id:   propertyStringId,
 				Type: "CHARSTRING",
 			},
+			{
+				Name: "pOnChange",
+				Id:   propertyIdOnChange,
+				Type: "FLOAT",
+				UpdateStrategy: "ON_CHANGE",
+				LastValue: 2.34,
+				ValueUpdatedAt: &lastValueTime,
+			},			
 		},
 		PropertiesCount: &propCount,
 	}
@@ -149,6 +159,7 @@ func TestExtractionFlow_defaultAggregation(t *testing.T) {
 		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,a,",
 		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,b,",
 		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,c,",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,b77f4ed5-7f52-4bd3-bdc6-b2936bec12de,pOnChange,FLOAT,2.34,LAST_VALUE",
 	}
 	for _, entry := range entries {
 		assert.Contains(t, string(content), entry)
@@ -162,6 +173,7 @@ func TestExtractionFlow_rawResolution(t *testing.T) {
 	thingId := "91f30213-2bd7-480a-b1dc-f31b01840e7e"
 	propertyId := "c86f4ed9-7f52-4bd3-bdc6-b2936bec68ac"
 	propertyStringId := "a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb"
+	propertyIdOnChange := "b77f4ed5-7f52-4bd3-bdc6-b2936bec12de"
 
 	// Init client
 	iotcl := iotMocks.NewAPI(t)
@@ -189,7 +201,8 @@ func TestExtractionFlow_rawResolution(t *testing.T) {
 
 	tsextractorClient := New(iotcl, logger)
 
-	propCount := int64(2)
+	lastValueTime := now.Add(-time.Minute * 1)
+	propCount := int64(3)
 	thingsMap := make(map[string]iotclient.ArduinoThing)
 	thingsMap[thingId] = iotclient.ArduinoThing{
 		Id:   thingId,
@@ -205,6 +218,14 @@ func TestExtractionFlow_rawResolution(t *testing.T) {
 				Id:   propertyStringId,
 				Type: "CHARSTRING",
 			},
+			{
+				Name: "pOnChange",
+				Id:   propertyIdOnChange,
+				Type: "FLOAT",
+				UpdateStrategy: "ON_CHANGE",
+				LastValue: 2.34,
+				ValueUpdatedAt: &lastValueTime,
+			},			
 		},
 		PropertiesCount: &propCount,
 	}
@@ -232,6 +253,7 @@ func TestExtractionFlow_rawResolution(t *testing.T) {
 		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,a",
 		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,b",
 		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,a86f4ed9-7f52-4bd3-bdc6-b2936bec68bb,pstringVar,CHARSTRING,c",
+		"91f30213-2bd7-480a-b1dc-f31b01840e7e,test,b77f4ed5-7f52-4bd3-bdc6-b2936bec12de,pOnChange,FLOAT,2.34",
 	}
 	for _, entry := range entries {
 		assert.Contains(t, string(content), entry)
