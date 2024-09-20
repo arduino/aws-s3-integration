@@ -188,7 +188,11 @@ func HandleRequest(ctx context.Context, event *AWSS3ImportTrigger) (*string, err
 	logger.Infoln("file compression enabled:", enabledCompression)
 	logger.Infoln("align time window:", enableAlignTimeWindow)
 
-	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat, enabledCompression, enableAlignTimeWindow)
+	tsExporter, err := exporter.New(*apikey, *apiSecret, organizationId, tags, enabledCompression, enableAlignTimeWindow, logger)
+	if err != nil {
+		return nil, err
+	}
+	err = tsExporter.StartExporter(ctx, *resolution, *extractionWindowMinutes, *destinationS3Bucket, *aggregationStat)
 	if err != nil {
 		message := "Error detected during data export"
 		return &message, err

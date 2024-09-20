@@ -360,7 +360,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			if !slices.Contains(populatedProperties, propertyID) {
 				populatedProperties = append(populatedProperties, propertyID)
 			}
-			samples = append(samples, composeRow(ts, thing.Id, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value), ""))
+			samples = append(samples, composeRow(ts, thing.Id, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value), "SAMPLED"))
 		}
 	}
 
