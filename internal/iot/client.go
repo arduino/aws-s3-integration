@@ -73,14 +73,14 @@ func (cl *Client) setup(client, secret, organizationId string) error {
 }
 
 // ThingList returns a list of things on Arduino IoT Cloud.
-func (cl *Client) ThingList(ctx context.Context, ids []string, device *string, props bool, tags map[string]string) ([]iotclient.ArduinoThing, error) {
+func (cl *Client) ThingList(ctx context.Context, ids []string, device *string, showProperties bool, tags map[string]string) ([]iotclient.ArduinoThing, error) {
 	ctx, err := ctxWithToken(ctx, cl.token)
 	if err != nil {
 		return nil, err
 	}
 
 	request := cl.api.ThingsV2Api.ThingsV2List(ctx)
-	request = request.ShowProperties(props)
+	request = request.ShowProperties(showProperties)
 
 	if ids != nil {
 		request = request.Ids(ids)

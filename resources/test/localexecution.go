@@ -89,9 +89,14 @@ func HandleRequest(ctx context.Context, dev bool) (*string, error) {
 		logger.Infoln("tags:", *tags)
 	}
 
-	err = exporter.StartExporter(ctx, logger, *apikey, *apiSecret, organizationId, tags, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket, "MAX", true, true)
+	tsExporter, err := exporter.New(*apikey, *apiSecret, organizationId, tags, true, true, logger)
 	if err != nil {
 		return nil, err
+	}
+	err = tsExporter.StartExporter(ctx, *resolution, TimeExtractionWindowMinutes, *destinationS3Bucket, "MAX")
+	if err != nil {
+		message := "Error detected during data export"
+		return &message, err
 	}
 
 	message := "Data exported successfully"

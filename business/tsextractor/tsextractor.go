@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -95,46 +96,66 @@ func (a *TsExtractor) ExportTSToFile(
 	} else {
 		a.logger.Infoln("=====> Exporting data. Time window: ", timeWindowInMinutes, "m (resolution: ", resolution, "s). From ", from, " to ", to, " - aggregation: ", aggregationStat)
 	}
-	for thingID, thing := range thingsMap {
+	for _, thing := range thingsMap {
 
-		if thing.Properties == nil || len(thing.Properties) == 0 {
-			a.logger.Warn("Skipping thing with no properties: ", thingID)
+		if len(thing.Properties) == 0 {
+			a.logger.Warn("Skipping thing with no properties: ", thing.Id)
 			continue
 		}
 
 		tokens <- struct{}{}
 		wg.Add(1)
 
-		go func(thingID string, thing iotclient.ArduinoThing, writer *csv.CsvWriter) {
+		go func(thing iotclient.ArduinoThing, writer *csv.CsvWriter) {
 			defer func() { <-tokens }()
 			defer wg.Done()
 
-			if isRawResolution(resolution) {
+			detectedProperties := []string{}
+			isRaw := isRawResolution(resolution)
+			if isRaw {
 				// Populate raw time series data
-				err := a.populateRawTSDataIntoS3(ctx, from, to, thingID, thing, writer)
+				populatedProperties, err := a.populateRawTSDataIntoS3(ctx, from, to, thing, writer)
 				if err != nil {
 					a.logger.Error("Error populating raw time series data: ", err)
 					errorChannel <- err
 					return
 				}
+				if len(populatedProperties) > 0 {
+					detectedProperties = append(detectedProperties, populatedProperties...)
+				}
 			} else {
 				// Populate numeric time series data
-				err := a.populateNumericTSDataIntoS3(ctx, from, to, thingID, thing, resolution, aggregationStat, writer)
+				populatedProperties, err := a.populateNumericTSDataIntoS3(ctx, from, to, thing, resolution, aggregationStat, writer)
 				if err != nil {
 					a.logger.Error("Error populating time series data: ", err)
 					errorChannel <- err
 					return
 				}
+				if len(populatedProperties) > 0 {
+					detectedProperties = append(detectedProperties, populatedProperties...)
+				}
 
 				// Populate string time series data, if any
-				err = a.populateStringTSDataIntoS3(ctx, from, to, thingID, thing, resolution, writer)
+				populatedProperties, err = a.populateStringTSDataIntoS3(ctx, from, to, thing, resolution, writer)
 				if err != nil {
 					a.logger.Error("Error populating string time series data: ", err)
 					errorChannel <- err
 					return
 				}
+				if len(populatedProperties) > 0 {
+					detectedProperties = append(detectedProperties, populatedProperties...)
+				}
 			}
-		}(thingID, thing, writer)
+
+			// Populate last value samples for ON_CHANGE properties, if needed
+			err = a.populateLastValueSamplesForOnChangeProperties(isRaw, thing, detectedProperties, writer)
+			if err != nil {
+				a.logger.Error("Error populating last value data: ", err)
+				errorChannel <- err
+				return
+			}
+
+		}(thing, writer)
 	}
 
 	// Wait for all routines termination
@@ -171,31 +192,31 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 	ctx context.Context,
 	from time.Time,
 	to time.Time,
-	thingID string,
 	thing iotclient.ArduinoThing,
 	resolution int,
 	aggregationStat string,
-	writer *csv.CsvWriter) error {
+	writer *csv.CsvWriter) ([]string, error) {
 
 	if resolution <= 60 {
 		resolution = 60
 	}
 
+	populatedProperties := []string{}
 	var batched *iotclient.ArduinoSeriesBatch
 	var err error
 	var retry bool
 	for i := 0; i < retryCount; i++ {
-		batched, retry, err = a.iotcl.GetTimeSeriesByThing(ctx, thingID, from, to, int64(resolution), aggregationStat)
+		batched, retry, err = a.iotcl.GetTimeSeriesByThing(ctx, thing.Id, from, to, int64(resolution), aggregationStat)
 		if !retry {
 			break
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
-			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thing.Id)
 			randomRateLimitingSleep()
 		}
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	sampleCount := int64(0)
@@ -206,7 +227,7 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 		}
 
 		propertyID := strings.Replace(response.Query, "property.", "", 1)
-		a.logger.Debugf("Thing %s - Property %s - %d values\n", thingID, propertyID, response.CountValues)
+		a.logger.Debugf("Thing %s - Property %s - %d values\n", thing.Id, propertyID, response.CountValues)
 		sampleCount += response.CountValues
 
 		propertyName, propertyType := extractPropertyNameAndType(thing, propertyID)
@@ -215,19 +236,22 @@ func (a *TsExtractor) populateNumericTSDataIntoS3(
 
 			ts := response.Times[i]
 			value := response.Values[i]
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, strconv.FormatFloat(value, 'f', -1, 64), aggregationStat))
+			if !slices.Contains(populatedProperties, propertyID) {
+				populatedProperties = append(populatedProperties, propertyID)
+			}
+			samples = append(samples, composeRow(ts, thing.Id, thing.Name, propertyID, propertyName, propertyType, strconv.FormatFloat(value, 'f', -1, 64), aggregationStat))
 		}
 	}
 
 	// Write samples to csv ouput file
 	if len(samples) > 0 {
 		if err := writer.Write(samples); err != nil {
-			return err
+			return nil, err
 		}
-		a.logger.Debugf("Thing %s [%s] saved %d values\n", thingID, thing.Name, sampleCount)
+		a.logger.Debugf("Thing %s [%s] saved %d values\n", thing.Id, thing.Name, sampleCount)
 	}
 
-	return nil
+	return populatedProperties, nil
 }
 
 func composeRow(ts time.Time, thingID string, thingName string, propertyID string, propertyName string, propertyType string, value string, aggregation string) []string {
@@ -272,17 +296,16 @@ func extractPropertyNameAndType(thing iotclient.ArduinoThing, propertyID string)
 }
 
 func isStringProperty(ptype string) bool {
-	return ptype == "CHARSTRING" || ptype == "LOCATION"
+	return iot.IsPropertyString(ptype) || iot.IsPropertyLocation(ptype)
 }
 
 func (a *TsExtractor) populateStringTSDataIntoS3(
 	ctx context.Context,
 	from time.Time,
 	to time.Time,
-	thingID string,
 	thing iotclient.ArduinoThing,
 	resolution int,
-	writer *csv.CsvWriter) error {
+	writer *csv.CsvWriter) ([]string, error) {
 
 	// Filter properties by char type
 	stringProperties := []string{}
@@ -293,9 +316,10 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 	}
 
 	if len(stringProperties) == 0 {
-		return nil
+		return nil, nil
 	}
 
+	populatedProperties := []string{}
 	var batched *iotclient.ArduinoSeriesBatchSampled
 	var err error
 	var retry bool
@@ -305,12 +329,12 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			break
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
-			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thing.Id)
 			randomRateLimitingSleep()
 		}
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	sampleCount := int64(0)
@@ -321,7 +345,7 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 		}
 
 		propertyID := strings.Replace(response.Query, "property.", "", 1)
-		a.logger.Debugf("Thing %s - String Property %s - %d values\n", thingID, propertyID, response.CountValues)
+		a.logger.Debugf("Thing %s - String Property %s - %d values\n", thing.Id, propertyID, response.CountValues)
 		sampleCount += response.CountValues
 
 		propertyName, propertyType := extractPropertyNameAndType(thing, propertyID)
@@ -333,44 +357,47 @@ func (a *TsExtractor) populateStringTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value), ""))
+			if !slices.Contains(populatedProperties, propertyID) {
+				populatedProperties = append(populatedProperties, propertyID)
+			}
+			samples = append(samples, composeRow(ts, thing.Id, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value), "SAMPLED"))
 		}
 	}
 
 	// Write samples to csv ouput file
 	if len(samples) > 0 {
 		if err := writer.Write(samples); err != nil {
-			return err
+			return nil, err
 		}
-		a.logger.Debugf("Thing %s [%s] string properties saved %d values\n", thingID, thing.Name, sampleCount)
+		a.logger.Debugf("Thing %s [%s] string properties saved %d values\n", thing.Id, thing.Name, sampleCount)
 	}
 
-	return nil
+	return populatedProperties, nil
 }
 
 func (a *TsExtractor) populateRawTSDataIntoS3(
 	ctx context.Context,
 	from time.Time,
 	to time.Time,
-	thingID string,
 	thing iotclient.ArduinoThing,
-	writer *csv.CsvWriter) error {
+	writer *csv.CsvWriter) ([]string, error) {
 
+	populatedProperties := []string{}
 	var batched *iotclient.ArduinoSeriesRawBatch
 	var err error
 	var retry bool
 	for i := 0; i < retryCount; i++ {
-		batched, retry, err = a.iotcl.GetRawTimeSeriesByThing(ctx, thingID, from, to)
+		batched, retry, err = a.iotcl.GetRawTimeSeriesByThing(ctx, thing.Id, from, to)
 		if !retry {
 			break
 		} else {
 			// This is due to a rate limit on the IoT API, we need to wait a bit before retrying
-			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thingID)
+			a.logger.Warnf("Rate limit reached for thing %s. Waiting 1 second before retrying.\n", thing.Id)
 			randomRateLimitingSleep()
 		}
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	sampleCount := int64(0)
@@ -381,7 +408,7 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 		}
 
 		propertyID := strings.Replace(response.Query, "property.", "", 1)
-		a.logger.Debugf("Thing %s - Query %s Property %s - %d values\n", thingID, response.Query, propertyID, response.CountValues)
+		a.logger.Debugf("Thing %s - Query %s Property %s - %d values\n", thing.Id, response.Query, propertyID, response.CountValues)
 		sampleCount += response.CountValues
 
 		propertyName, propertyType := extractPropertyNameAndType(thing, propertyID)
@@ -393,19 +420,22 @@ func (a *TsExtractor) populateRawTSDataIntoS3(
 			if value == nil {
 				continue
 			}
-			samples = append(samples, composeRawRow(ts, thingID, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value)))
+			if !slices.Contains(populatedProperties, propertyID) {
+				populatedProperties = append(populatedProperties, propertyID)
+			}
+			samples = append(samples, composeRawRow(ts, thing.Id, thing.Name, propertyID, propertyName, propertyType, a.interfaceToString(value)))
 		}
 	}
 
 	// Write samples to csv ouput file
 	if len(samples) > 0 {
 		if err := writer.Write(samples); err != nil {
-			return err
+			return nil, err
 		}
-		a.logger.Debugf("Thing %s [%s] raw data saved %d values\n", thingID, thing.Name, sampleCount)
+		a.logger.Debugf("Thing %s [%s] raw data saved %d values\n", thing.Id, thing.Name, sampleCount)
 	}
 
-	return nil
+	return populatedProperties, nil
 }
 
 func (a *TsExtractor) interfaceToString(value interface{}) string {
@@ -428,4 +458,48 @@ func (a *TsExtractor) interfaceToString(value interface{}) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+func isLastValueAllowedProperty(prop iotclient.ArduinoProperty) bool {
+	return prop.UpdateStrategy == "ON_CHANGE" && (isStringProperty(prop.Type) || iot.IsPropertyBool(prop.Type) || iot.IsPropertyNumberType(prop.Type))
+}
+
+func (a *TsExtractor) populateLastValueSamplesForOnChangeProperties(
+	isRaw bool,
+	thing iotclient.ArduinoThing,
+	propertiesWithExtractedValue []string,
+	writer *csv.CsvWriter) error {
+
+	// Check if there are ON_CHANGE properties
+	if len(thing.Properties) == 0 {
+		return nil
+	}
+	samples := [][]string{}
+	sampleCount := 0
+	for _, prop := range thing.Properties {
+		if isLastValueAllowedProperty(prop) && !slices.Contains(propertiesWithExtractedValue, prop.Id) {
+			if prop.ValueUpdatedAt == nil {
+				continue
+			}
+			propName, propType := extractPropertyNameAndType(thing, prop.Id)
+			var toAdd []string
+			if isRaw {
+				toAdd = composeRawRow(*prop.ValueUpdatedAt, thing.Id, thing.Name, prop.Id, propName, propType, a.interfaceToString(prop.LastValue))
+			} else {
+				toAdd = composeRow(*prop.ValueUpdatedAt, thing.Id, thing.Name, prop.Id, propName, propType, a.interfaceToString(prop.LastValue), "LAST_VALUE")
+			}
+			samples = append(samples, toAdd)
+			sampleCount++
+		}
+	}
+
+	// Write samples to csv ouput file
+	if len(samples) > 0 {
+		if err := writer.Write(samples); err != nil {
+			return err
+		}
+		a.logger.Debugf("Thing %s [%s] last value data saved %d values\n", thing.Id, thing.Name, sampleCount)
+	}
+
+	return nil
 }
