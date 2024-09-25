@@ -212,7 +212,7 @@ func configureExtractionResolution(logger *logrus.Entry, paramReader *parameters
 			logger.Error("Error reading parameter "+paramReader.ResolveParameter(SamplesResoStack, stack), err)
 		}
 	} else {
-		resolution, err = paramReader.ReadIntConfig(SamplesReso)
+		resolution, err = paramReader.ReadIntConfig(SamplesResoSec)
 		if err != nil {
 			// Possibly this parameter is not set. Try SamplesReso
 			res, err = paramReader.ReadConfig(SamplesReso)
@@ -249,6 +249,8 @@ func configureExtractionResolution(logger *logrus.Entry, paramReader *parameters
 func configureDataExtractionTimeWindow(logger *logrus.Entry, paramReader *parameters.ParametersClient, stack string) (*int, error) {
 	var schedule *string
 	var err error
+	extractionWindowMinutes := DefaultTimeExtractionWindowMinutes
+
 	if stack != "" {
 		schedule, err = paramReader.ReadConfigByStack(SchedulingStack, stack)
 		if err != nil {
@@ -256,12 +258,16 @@ func configureDataExtractionTimeWindow(logger *logrus.Entry, paramReader *parame
 		}
 	} else {
 		schedule, err = paramReader.ReadConfig(Scheduling)
+		if err != nil {
+			// In such case, scheduling is fixed to 1 hour
+			return &extractionWindowMinutes, nil
+		}
 	}
 	if err != nil {
 		logger.Error("Error reading parameter "+Scheduling, err)
 		return nil, err
 	}
-	extractionWindowMinutes := DefaultTimeExtractionWindowMinutes
+
 	switch *schedule {
 	case "5 minutes":
 		extractionWindowMinutes = 5
